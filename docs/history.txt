@@ -1,0 +1,61 @@
+ASI183MM SPECTROMETER PROJECT HISTORY
+=====================================
+
+This file documents the chronological development and changes made to the ASI183MM spectrometer project.
+
+INITIAL PROJECT CREATION
+-----------------------
+- Created core project structure with src/, tests/, docs/, scripts/, and config/ directories
+- Implemented base functionality for camera control (camera.py)
+- Created spectrometer data processing module (spectrometer.py)
+- Implemented RESTful API for remote control (api.py)
+- Created main application entry point (main.py)
+- Added requirements.txt with Python dependencies
+- Created initial README.md with project documentation
+- Added install.sh and run_server.sh scripts
+
+VIRTUAL ENVIRONMENT AND INSTALLATION IMPROVEMENTS
+------------------------------------------------
+Date: 2025-04-28
+
+1. Virtual Environment Setup
+   - Modified requirements.txt to make RPi.GPIO optional (preventing installation errors)
+   - Enhanced installation process with virtual environment support
+   - Added Python dependency error handling
+
+2. Script Improvements
+   - Updated scripts/install.sh to support virtual environment
+   - Updated scripts/run_server.sh to use virtual environment
+   - Added Windows support with scripts/setup_windows.bat and scripts/run_server.bat
+   - Made all scripts executable with proper permissions
+
+3. Testing Improvements
+   - Created environment test script (test_env.py) to verify Python dependencies without hardware
+   - Enhanced tests/test_camera.py with better error handling and SDK path checking
+   - Moved test_env.py to tests/ directory for better organization
+   - Added project structure verification to test_env.py
+
+4. Documentation Updates
+   - Enhanced README.md with detailed installation instructions for both Linux and Windows
+   - Added virtual environment setup instructions
+   - Added testing information for both environment and camera testing
+   - Documented command-line options for running the server
+   - Added project structure documentation
+
+5. Project Organization
+   - Organized all test files in the tests/ directory
+   - Enhanced path handling across all modules
+   - Improved error reporting with more helpful messages
+   - Created documentation history tracking (this file)
+
+VERSION CONTROL PREPARATION
+--------------------------
+Date: 2025-04-28
+
+1. Added .gitignore file with comprehensive rules:
+   - Excluded Python virtual environment directories (.venv, venv, etc.)
+   - Excluded Python bytecode and cache files (__pycache__, .pyc, etc.)
+   - Excluded log files and data directories (logs/, spectra/, test_images/)
+   - Excluded OS-specific files (.DS_Store, Thumbs.db, etc.)
+   - Excluded IDE-specific files (.idea/, .vscode/, etc.)
+   - Excluded environment variables and local configuration files 

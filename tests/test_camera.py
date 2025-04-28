@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 Test script for the ASI183MM camera module
+
+IMPORTANT: This test requires actual camera hardware to be connected.
+Use test_env.py in the project root to verify your environment setup without hardware.
 """
 import os
 import sys
@@ -12,9 +15,16 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Add parent directory to path to import camera module
-sys.path.append(str(Path(__file__).parent.parent / 'src'))
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root / 'src'))
 
-from camera import ASI183Camera
+try:
+    from camera import ASI183Camera
+except ImportError:
+    print("ERROR: Could not import camera module.")
+    print("Make sure you've installed the project requirements.")
+    print("Try running: python test_env.py in the project root first.")
+    sys.exit(1)
 
 # Configure logging
 logging.basicConfig(
@@ -41,9 +51,22 @@ def main():
     if args.sdk_path:
         os.environ['ZWO_ASI_LIB'] = args.sdk_path
     
-    # Create save directory
-    save_dir = Path(args.save_dir)
+    # Create save directory (use absolute path for clarity)
+    save_dir = project_root / args.save_dir
     save_dir.mkdir(exist_ok=True)
+    logger.info(f"Saving test results to: {save_dir}")
+    
+    # Check if ZWO_ASI_LIB is set
+    if 'ZWO_ASI_LIB' not in os.environ:
+        logger.warning("ZWO_ASI_LIB environment variable not set")
+        logger.warning("Please set it to the path of the ASI SDK library file")
+        logger.warning("Example: export ZWO_ASI_LIB=/path/to/libASICamera2.so")
+    else:
+        sdk_path = os.environ['ZWO_ASI_LIB']
+        if not os.path.exists(sdk_path):
+            logger.warning(f"ASI SDK library not found at: {sdk_path}")
+        else:
+            logger.info(f"Using ASI SDK library at: {sdk_path}")
     
     # Initialize camera
     try:
@@ -54,6 +77,7 @@ def main():
         logger.info("Connecting to camera...")
         if not camera.connect():
             logger.error("Failed to connect to camera")
+            logger.error("Please check that the camera is properly connected and powered on")
             return 1
             
         # Get camera info
@@ -138,6 +162,8 @@ def main():
         
     except Exception as e:
         logger.error(f"Test failed: {e}")
+        logger.error("If this is an SDK error, make sure the ASI SDK is properly installed")
+        logger.error("and the ZWO_ASI_LIB environment variable is correctly set")
         return 1
 
 if __name__ == "__main__":

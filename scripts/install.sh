@@ -43,6 +43,33 @@ if ! command_exists pip3; then
     exit 1
 fi
 
+# Install system dependencies
+echo -e "${GREEN}Installing system dependencies...${NC}"
+if [ "$(id -u)" -eq 0 ]; then
+    apt-get update
+    apt-get install -y python3-dev python3-venv
+else
+    echo -e "${YELLOW}Not running as root, skipping system package installation${NC}"
+    echo -e "${YELLOW}If installation fails, run: sudo apt-get install python3-dev python3-venv${NC}"
+fi
+
+# Setup virtual environment
+echo -e "${GREEN}Setting up Python virtual environment...${NC}"
+# Navigate to the project root
+cd "$(dirname "$0")/.."
+
+# Create virtual environment if it doesn't exist
+if [ ! -d ".venv" ]; then
+    python3 -m venv .venv
+    echo -e "${GREEN}Created virtual environment in .venv directory${NC}"
+else
+    echo -e "${GREEN}Using existing virtual environment in .venv directory${NC}"
+fi
+
+# Activate virtual environment
+echo -e "${GREEN}Activating virtual environment...${NC}"
+source .venv/bin/activate
+
 # Check for ZWO ASI SDK
 ASI_LIB_PATHS=(
     "/usr/local/lib/libASICamera2.so"
@@ -73,22 +100,33 @@ fi
 
 # Install dependencies
 echo -e "${GREEN}Installing dependencies...${NC}"
-pip3 install -r ../requirements.txt
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Ask about RPi.GPIO installation
+read -p "Do you want to install RPi.GPIO for Raspberry Pi GPIO access? (y/n): " install_gpio
+if [[ $install_gpio == "y" || $install_gpio == "Y" ]]; then
+    echo -e "${GREEN}Installing RPi.GPIO...${NC}"
+    pip install RPi.GPIO
+fi
 
 # Create necessary directories
-mkdir -p ../spectra
-mkdir -p ../logs
+mkdir -p spectra
+mkdir -p logs
 
 # Set permissions
-chmod +x ../src/main.py
+chmod +x src/main.py
+chmod +x scripts/run_server.sh
+chmod +x tests/test_env.py
+chmod +x tests/test_camera.py
 
 echo -e "${GREEN}Installation complete!${NC}"
 echo ""
-echo -e "${GREEN}To start the spectrometer backend:${NC}"
-echo -e "cd ../src && python3 main.py"
+echo -e "${GREEN}To run the test script to verify your environment:${NC}"
+echo -e "source .venv/bin/activate && python tests/test_env.py"
 echo ""
-echo -e "${GREEN}For help and options:${NC}"
-echo -e "python3 main.py --help"
+echo -e "${GREEN}To start the spectrometer backend:${NC}"
+echo -e "scripts/run_server.sh"
 echo ""
 
 if [ "$ASI_LIB_FOUND" = true ]; then
