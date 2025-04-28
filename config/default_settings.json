@@ -1,0 +1,27 @@
+{
+    "camera": {
+        "exposure_ms": 100,
+        "gain": 0,
+        "roi": {
+            "start_x": 0,
+            "start_y": 0,
+            "width": null,
+            "height": 100,
+            "binning": 1
+        }
+    },
+    "spectrometer": {
+        "smoothing_window": 5,
+        "subtract_background": false,
+        "subtract_dark": false
+    },
+    "calibration": {
+        "wavelength_coefficients": [400.0, 0.5],
+        "wavelength_unit": "nm"
+    },
+    "server": {
+        "host": "0.0.0.0",
+        "port": 8000,
+        "debug": false
+    }
+} 
