@@ -72,7 +72,6 @@ class WavelengthCalibration(BaseModel):
 class ProcessingSettings(BaseModel):
     """Spectrum processing settings"""
     subtract_dark: Optional[bool] = Field(None, description="Whether to subtract dark frame")
-    subtract_background: Optional[bool] = Field(None, description="Whether to subtract background")
     smoothing: Optional[bool] = Field(None, description="Whether to apply smoothing")
     smoothing_window: Optional[int] = Field(None, description="Size of smoothing window")
 
@@ -121,7 +120,6 @@ async def get_status(spectrometer: Spectrometer = Depends(get_spectrometer)):
         },
         "processing": {
             "subtract_dark": spectrometer.subtract_dark,
-            "subtract_background": spectrometer.subtract_background,
             "smoothing_window": spectrometer.smoothing_window
         }
     }
@@ -208,8 +206,6 @@ async def set_processing(
     try:
         if settings.subtract_dark is not None:
             spectrometer.subtract_dark = settings.subtract_dark
-        if settings.subtract_background is not None:
-            spectrometer.subtract_background = settings.subtract_background
         if settings.smoothing_window is not None:
             spectrometer.smoothing_window = settings.smoothing_window
             
@@ -217,7 +213,6 @@ async def set_processing(
             "message": "Processing settings updated",
             "settings": {
                 "subtract_dark": spectrometer.subtract_dark,
-                "subtract_background": spectrometer.subtract_background,
                 "smoothing_window": spectrometer.smoothing_window
             }
         }
@@ -233,19 +228,9 @@ async def acquire_dark(spectrometer: Spectrometer = Depends(get_spectrometer)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to acquire dark frame: {str(e)}")
 
-@app.post("/acquire/background", tags=["Acquisition"])
-async def acquire_background(spectrometer: Spectrometer = Depends(get_spectrometer)):
-    """Acquire a background frame"""
-    try:
-        bg_frame = spectrometer.acquire_background_frame()
-        return {"message": "Background frame acquired", "shape": list(bg_frame.shape)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to acquire background: {str(e)}")
-
 @app.get("/acquire/spectrum", tags=["Acquisition"], response_model=SpectrumResponse)
 async def acquire_spectrum(
     subtract_dark: Optional[bool] = Query(None, description="Whether to subtract dark frame"),
-    subtract_background: Optional[bool] = Query(None, description="Whether to subtract background"),
     smoothing: Optional[bool] = Query(True, description="Whether to apply smoothing"),
     spectrometer: Spectrometer = Depends(get_spectrometer)
 ):
@@ -257,7 +242,6 @@ async def acquire_spectrum(
         # Acquire the spectrum
         wavelengths, intensities = spectrometer.acquire_spectrum(
             subtract_dark=subtract_dark,
-            subtract_background=subtract_background,
             smoothing=smoothing
         )
         
@@ -274,7 +258,7 @@ async def acquire_spectrum(
 
 @app.get("/acquire/image", tags=["Acquisition"])
 async def acquire_raw_image(spectrometer: Spectrometer = Depends(get_spectrometer)):
-    """Acquire a raw 2D image and return it as a base64-encoded PNG"""
+    """Acquire a raw 2D image and return it as a base64-encoded PNG with ROI overlay"""
     try:
         # Acquire raw image
         raw_image = spectrometer.acquire_spectrum(return_raw=True)
@@ -287,17 +271,45 @@ async def acquire_raw_image(spectrometer: Spectrometer = Depends(get_spectromete
         else:
             img_norm = np.zeros_like(raw_image, dtype=np.uint8)
         
+        # Convert to RGB for overlay
+        from PIL import Image, ImageDraw
+        img_rgb = Image.fromarray(img_norm).convert('RGB')
+        
+        # Get current ROI settings
+        roi = spectrometer.roi_settings
+        
+        # Draw ROI rectangle
+        draw = ImageDraw.Draw(img_rgb)
+        
+        # Define rectangle coordinates
+        left = roi["start_x"]
+        top = roi["start_y"]
+        right = left + (roi["width"] or 0) 
+        bottom = top + (roi["height"] or 0)
+        
+        # Draw red rectangle with 2px width
+        draw.rectangle([left, top, right-1, bottom-1], outline=(255, 0, 0), width=2)
+        
         # Convert to PNG
-        from PIL import Image
-        img = Image.fromarray(img_norm)
         buffer = BytesIO()
-        img.save(buffer, format="PNG")
+        img_rgb.save(buffer, format="PNG")
         buffer.seek(0)
         
         # Return as streaming response
         return StreamingResponse(buffer, media_type="image/png")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to acquire image: {str(e)}")
+
+@app.get("/roi", tags=["Settings"])
+async def get_roi(spectrometer: Spectrometer = Depends(get_spectrometer)):
+    """Get the current ROI settings"""
+    try:
+        return {
+            "roi": spectrometer.roi_settings,
+            "camera_info": spectrometer.camera.get_camera_info()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get ROI settings: {str(e)}")
 
 @app.post("/save/spectrum", tags=["Data"])
 async def save_spectrum_data(

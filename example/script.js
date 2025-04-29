@@ -13,12 +13,9 @@ const DEFAULT_HEADERS = {
 // State management
 const appState = {
     connected: false,
-    continuousMode: false,
-    continuousInterval: null,
     currentSpectrum: null,
     wavelengths: null,
-    darkFrame: null,
-    backgroundFrame: null
+    darkFrame: null
 };
 
 // DOM elements
@@ -50,10 +47,7 @@ const elements = {
     
     // Acquisition
     acquireDarkBtn: document.getElementById('acquire-dark-btn'),
-    acquireBackgroundBtn: document.getElementById('acquire-background-btn'),
     acquireSpectrumBtn: document.getElementById('acquire-spectrum-btn'),
-    continuousMode: document.getElementById('continuous-mode'),
-    updateInterval: document.getElementById('update-interval'),
     
     // Spectrum display
     spectrumCanvas: document.getElementById('spectrum-canvas'),
@@ -83,9 +77,7 @@ function initApp() {
     elements.setRoiBtn.addEventListener('click', setRoi);
     elements.setCalibrationBtn.addEventListener('click', setCalibration);
     elements.acquireDarkBtn.addEventListener('click', acquireDark);
-    elements.acquireBackgroundBtn.addEventListener('click', acquireBackground);
     elements.acquireSpectrumBtn.addEventListener('click', acquireSpectrum);
-    elements.continuousMode.addEventListener('change', toggleContinuousMode);
     elements.saveSpectrumBtn.addEventListener('click', saveSpectrum);
     elements.copyDataBtn.addEventListener('click', copyData);
     elements.clearLogBtn.addEventListener('click', clearLog);
@@ -93,6 +85,10 @@ function initApp() {
     // Set up canvas
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+    
+    // Set default values
+    elements.exposureTime.value = 100;
+    elements.gain.value = 0;
     
     // Log initialization
     logMessage('Interface initialized', 'info');
@@ -161,8 +157,30 @@ async function connectSpectrometer() {
         
         logMessage('Connected to spectrometer', 'success');
         
-        // Get current settings
+        // Get current settings and set ROI to full sensor size
         await getSpectrumeterSettings();
+        
+        // Try to set ROI to full sensor immediately
+        try {
+            const statusData = await apiRequest('/status', 'GET');
+            if (statusData && statusData.camera_info && 
+                statusData.camera_info.max_width && statusData.camera_info.max_height) {
+                
+                // Set ROI inputs to full sensor
+                elements.roiStartX.value = 0;
+                elements.roiStartY.value = 0;
+                elements.roiWidth.value = statusData.camera_info.max_width;
+                elements.roiHeight.value = statusData.camera_info.max_height;
+                elements.roiBinning.value = 1;
+                
+                // Apply ROI settings automatically
+                await setRoi();
+                
+                logMessage('ROI set to full sensor automatically', 'success');
+            }
+        } catch (error) {
+            logMessage(`Could not auto-set ROI: ${error.message}`, 'warning');
+        }
     } catch (error) {
         elements.connectionStatus.textContent = 'Disconnected';
         elements.connectionStatus.className = 'status disconnected';
@@ -174,6 +192,7 @@ async function connectSpectrometer() {
 async function disconnectSpectrometer() {
     try {
         logMessage('Disconnecting from spectrometer...', 'info');
+        
         await apiRequest('/disconnect', 'POST');
         
         appState.connected = false;
@@ -182,11 +201,6 @@ async function disconnectSpectrometer() {
         
         // Disable controls
         toggleControlsEnabled(false);
-        
-        // Stop continuous mode if active
-        if (appState.continuousMode) {
-            toggleContinuousMode();
-        }
         
         logMessage('Disconnected from spectrometer', 'success');
     } catch (error) {
@@ -200,10 +214,14 @@ async function getSpectrumeterSettings() {
         // Get status for all settings
         const statusData = await apiRequest('/status', 'GET');
         if (statusData) {
+            // Store the current exposure and gain values just in case
+            const currentExposure = elements.exposureTime.value;
+            const currentGain = elements.gain.value;
+            
             if (statusData.settings) {
-                elements.exposureTime.value = statusData.settings.exposure_ms;
-                elements.gain.value = statusData.settings.gain;
-                logMessage(`Current exposure: ${statusData.settings.exposure_ms}ms, gain: ${statusData.settings.gain}`, 'info');
+                elements.exposureTime.value = statusData.settings.exposure_ms || currentExposure;
+                elements.gain.value = statusData.settings.gain || currentGain;
+                logMessage(`Current exposure: ${elements.exposureTime.value}ms, gain: ${elements.gain.value}`, 'info');
             }
             
             if (statusData.roi) {
@@ -215,12 +233,28 @@ async function getSpectrumeterSettings() {
                 logMessage(`Current ROI: (${statusData.roi.start_x},${statusData.roi.start_y}) ${statusData.roi.width}x${statusData.roi.height}, binning: ${statusData.roi.binning}`, 'info');
             }
             
+            if (statusData.camera_info) {
+                // Set defaults based on camera info if available
+                if (statusData.camera_info.max_width && statusData.camera_info.max_height) {
+                    // Set ROI to full sensor size if not already set
+                    if (!elements.roiWidth.value || elements.roiWidth.value === "null") {
+                        elements.roiWidth.value = statusData.camera_info.max_width;
+                    }
+                    
+                    if (!elements.roiHeight.value || elements.roiHeight.value === "null") {
+                        elements.roiHeight.value = statusData.camera_info.max_height;
+                    }
+                    
+                    logMessage(`Set ROI to full sensor size: ${elements.roiWidth.value}x${elements.roiHeight.value}`, 'info');
+                }
+            }
+            
             if (statusData.calibration && statusData.calibration.coefficients) {
                 const coeffs = statusData.calibration.coefficients;
-                elements.wavelengthA.value = coeffs[0];
-                elements.wavelengthB.value = coeffs[1];
-                elements.wavelengthC.value = coeffs[2];
-                logMessage(`Current calibration: A=${coeffs[0]}, B=${coeffs[1]}, C=${coeffs[2]}`, 'info');
+                elements.wavelengthA.value = coeffs[0] || 0.0;
+                elements.wavelengthB.value = coeffs[1] || 1.0;
+                elements.wavelengthC.value = coeffs.length > 2 ? coeffs[2] : 0.0;
+                logMessage(`Current calibration: A=${elements.wavelengthA.value}, B=${elements.wavelengthB.value}, C=${elements.wavelengthC.value}`, 'info');
             }
         }
     } catch (error) {
@@ -313,80 +347,27 @@ async function acquireDark() {
     }
 }
 
-// Acquire background frame
-async function acquireBackground() {
-    try {
-        logMessage('Acquiring background frame...', 'info');
-        const backgroundData = await apiRequest('/acquire/background', 'POST');
-        appState.backgroundFrame = backgroundData;
-        logMessage('Background frame acquired successfully', 'success');
-    } catch (error) {
-        logMessage(`Error acquiring background frame: ${error.message}`, 'error');
-    }
-}
-
 // Acquire spectrum
 async function acquireSpectrum() {
     try {
         logMessage('Acquiring spectrum...', 'info');
         const spectrumData = await apiRequest('/acquire/spectrum', 'GET');
         
-        if (spectrumData && spectrumData.wavelengths && spectrumData.intensities) {
-            appState.currentSpectrum = spectrumData.intensities;
-            appState.wavelengths = spectrumData.wavelengths;
-            
-            // Draw the spectrum
-            drawSpectrum(spectrumData.wavelengths, spectrumData.intensities);
-            
-            // Update stats
-            updateSpectrumStats(spectrumData.intensities);
-            
-            // Enable save and copy buttons
-            elements.saveSpectrumBtn.disabled = false;
-            elements.copyDataBtn.disabled = false;
-            
-            logMessage('Spectrum acquired successfully', 'success');
-        } else {
-            logMessage('Invalid spectrum data received', 'error');
-        }
+        // Store the spectrum data and update display
+        appState.wavelengths = spectrumData.wavelengths;
+        appState.currentSpectrum = spectrumData.intensities;
+        
+        // Draw spectrum
+        drawSpectrum(appState.wavelengths, appState.currentSpectrum);
+        updateSpectrumStats(appState.currentSpectrum);
+        
+        // Enable export buttons
+        elements.saveSpectrumBtn.disabled = false;
+        elements.copyDataBtn.disabled = false;
+        
+        logMessage('Spectrum acquired successfully', 'success');
     } catch (error) {
         logMessage(`Error acquiring spectrum: ${error.message}`, 'error');
-    }
-}
-
-// Toggle continuous acquisition mode
-function toggleContinuousMode() {
-    const isContinuous = elements.continuousMode.checked;
-    
-    if (isContinuous && !appState.continuousInterval) {
-        // Start continuous mode
-        const interval = parseInt(elements.updateInterval.value);
-        logMessage(`Starting continuous acquisition (${interval}ms interval)`, 'info');
-        
-        // Initial acquisition
-        acquireSpectrum();
-        
-        // Set up interval
-        appState.continuousInterval = setInterval(acquireSpectrum, interval);
-        appState.continuousMode = true;
-        
-        // Disable certain controls during continuous mode
-        elements.acquireDarkBtn.disabled = true;
-        elements.acquireBackgroundBtn.disabled = true;
-        elements.setRoiBtn.disabled = true;
-    } else if (!isContinuous && appState.continuousInterval) {
-        // Stop continuous mode
-        logMessage('Stopping continuous acquisition', 'info');
-        clearInterval(appState.continuousInterval);
-        appState.continuousInterval = null;
-        appState.continuousMode = false;
-        
-        // Re-enable controls
-        if (appState.connected) {
-            elements.acquireDarkBtn.disabled = false;
-            elements.acquireBackgroundBtn.disabled = false;
-            elements.setRoiBtn.disabled = false;
-        }
     }
 }
 
@@ -581,7 +562,6 @@ function toggleControlsEnabled(enabled) {
     elements.setRoiBtn.disabled = !enabled;
     elements.setCalibrationBtn.disabled = !enabled;
     elements.acquireDarkBtn.disabled = !enabled;
-    elements.acquireBackgroundBtn.disabled = !enabled;
     elements.acquireSpectrumBtn.disabled = !enabled;
     elements.connectBtn.disabled = enabled;
 }

@@ -47,11 +47,9 @@ class Spectrometer:
         
         # Background and dark frames
         self.dark_frame = None
-        self.background_frame = None
         
         # Processing settings
         self.smoothing_window = 5  # For savgol filter
-        self.subtract_background = False
         self.subtract_dark = False
     
     def connect(self) -> bool:
@@ -156,23 +154,8 @@ class Spectrometer:
         self.dark_frame = self.camera.capture_raw()
         return self.dark_frame
     
-    def acquire_background_frame(self) -> np.ndarray:
-        """
-        Acquire a background frame (with no sample)
-        
-        Returns:
-            Background frame as NumPy array
-        """
-        if not self.connected:
-            raise RuntimeError("Spectrometer not connected")
-            
-        # Acquire background frame
-        self.background_frame = self.camera.capture_raw()
-        return self.background_frame
-    
     def acquire_spectrum(self, 
                          subtract_dark: Optional[bool] = None,
-                         subtract_background: Optional[bool] = None,
                          smoothing: Optional[bool] = True,
                          return_raw: bool = False
                         ) -> Union[Tuple[np.ndarray, np.ndarray], np.ndarray]:
@@ -181,7 +164,6 @@ class Spectrometer:
         
         Args:
             subtract_dark: Whether to subtract dark frame (None uses default setting)
-            subtract_background: Whether to subtract background (None uses default setting)
             smoothing: Whether to apply smoothing
             return_raw: If True, returns the raw 2D image instead of processed spectrum
             
@@ -194,8 +176,6 @@ class Spectrometer:
         # Use instance defaults if not specified
         if subtract_dark is None:
             subtract_dark = self.subtract_dark
-        if subtract_background is None:
-            subtract_background = self.subtract_background
             
         # Acquire raw image
         raw_image = self.camera.capture_raw()
@@ -211,18 +191,13 @@ class Spectrometer:
             else:
                 logger.warning("Dark frame shape mismatch, skipping subtraction")
                 
-        # Sum along rows (vertical axis) to get the spectrum
-        spectrum = np.sum(raw_image, axis=0)
-        
-        # Apply background subtraction if needed
-        if subtract_background and self.background_frame is not None:
-            background_spectrum = np.sum(self.background_frame, axis=0)
-            if spectrum.shape == background_spectrum.shape:
-                spectrum = spectrum - background_spectrum
-                spectrum = np.clip(spectrum, 0, None)  # Prevent negative values
-            else:
-                logger.warning("Background spectrum shape mismatch, skipping subtraction")
-                
+        # Calculate average along rows (vertical axis) to get the spectrum
+        # instead of summing to account for different ROI heights
+        if raw_image.shape[0] > 0:  # Ensure we don't divide by zero
+            spectrum = np.mean(raw_image, axis=0)
+        else:
+            spectrum = np.sum(raw_image, axis=0)  # Fallback to sum if height is zero
+            
         # Apply smoothing if requested
         if smoothing and self.smoothing_window > 0:
             if self.smoothing_window % 2 == 0:

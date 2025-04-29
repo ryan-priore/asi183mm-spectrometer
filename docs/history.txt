@@ -235,3 +235,194 @@ Date: 2025-04-30 14:30:00
    - Implemented more robust error handling in client-side code
    - Added debugging tools to help diagnose connection issues
    - Improved the user experience with better status feedback during operations 
+
+BACKGROUND MEASUREMENT REMOVAL
+----------------------------
+Date: 2025-04-30 18:30:00
+
+1. Removed background measurement functionality:
+   - Removed background_frame attribute and tracking from Spectrometer class
+   - Deleted the acquire_background_frame method from Spectrometer
+   - Removed background subtraction code path from spectrum processing
+   - Deleted the subtract_background settings from class configuration
+
+2. API updates:
+   - Removed the /acquire/background endpoint from the REST API
+   - Updated the ProcessingSettings class to remove background-related parameters
+   - Modified status endpoint to no longer report background settings
+   - Updated spectrum acquisition endpoints to remove background subtraction options
+
+3. Web interface updates:
+   - Removed "Acquire Background" button from the main interface
+   - Deleted the acquireBackground function from JavaScript code
+   - Removed background-related event listeners
+   - Updated the spectrum acquisition code to no longer reference background data
+   - Removed background button from the test interface
+
+4. Documentation:
+   - Updated history.txt to document the removal of background functionality
+   - Maintained all dark frame acquisition functionality without changes
+
+ACQUISITION INTERFACE IMPROVEMENT
+------------------------------
+Date: 2025-05-01 10:45:00
+
+1. Improved acquisition controls:
+   - Replaced checkbox-based continuous mode with two separate buttons
+   - Added dedicated "Single Acquisition" and "Continuous Acquisition" buttons
+   - Improved visual separation between acquisition controls and settings
+   - Enhanced the button states during continuous acquisition
+
+2. Improved continuous acquisition functionality:
+   - Added more robust start/stop functions for continuous acquisition
+   - Implemented proper button text changes based on acquisition state
+   - Enhanced state management for continuous mode
+   - Added proper disabling of relevant controls during acquisition
+   - Improved acquisition interval control layout
+
+3. Code quality improvements:
+   - Refactored continuous acquisition code into separate functions
+   - Enhanced error handling during acquisition state transitions
+   - Improved visual feedback during acquisition operations
+   - Added appropriate spacing and styling for new interface elements
+
+CONTINUOUS ACQUISITION BUGFIX AND DEFAULT VALUES
+---------------------------------------------
+Date: 2025-05-01 11:30:00
+
+1. Fixed critical bug in continuous acquisition:
+   - Fixed issue where continuous acquisition couldn't be stopped
+   - Added additional safeguards when clearing interval timers
+   - Improved the interval clearing logic to ensure proper cleanup
+   - Enhanced logging for acquisition start/stop events
+   - Added success message when acquisition is successfully stopped
+
+2. Set default values for critical parameters:
+   - Set default exposure time to 100ms in both HTML and JavaScript
+   - Set default gain value to 0 in both HTML and JavaScript
+   - Ensured values are consistently initialized during page load
+   - Removed unused CSS for old continuous mode checkbox implementation
+
+USER INTERFACE RELIABILITY IMPROVEMENTS
+-------------------------------------
+Date: 2025-05-01 12:15:00
+
+1. Enhanced default values preservation:
+   - Fixed issue where default exposure and gain values disappeared after connection
+   - Added value preservation logic to maintain user-defined settings
+   - Implemented fallback to previous values if server returns empty or null values
+   - Enhanced logging to provide feedback about current settings
+
+2. Improved ROI handling:
+   - Added automatic detection of camera sensor dimensions
+   - Set the default ROI to use the full camera sensor size
+   - Added checks to prevent null or invalid ROI dimensions
+   - Implemented fallback values for calibration coefficients
+   - Enhanced error handling for missing or invalid settings
+
+CONTINUOUS ACQUISITION CRITICAL FIX
+---------------------------------
+Date: 2025-05-01 13:30:00
+
+1. Completely rewritten continuous acquisition system:
+   - Implemented robust interval management with explicit timer IDs
+   - Added comprehensive logging throughout acquisition lifecycle
+   - Added visual feedback with pulsing button during active acquisition
+   - Implemented fail-safe clearing of intervals with multiple approaches
+   - Added verification step to confirm intervals are properly cleared
+
+2. Added protection mechanisms:
+   - Implemented page unload handler to prevent orphaned timers
+   - Added forced cleanup during disconnect operations
+   - Included safeguards against multiple running timers
+   - Added explicit window-level interval clearing for maximum reliability
+   - Enhanced error detection with detailed logging of timer states
+
+3. Improved user experience:
+   - Added visual pulsing animation to indicate active acquisition
+   - Enhanced button state management for clearer operational feedback
+   - Improved logging to show exact timer IDs and state transitions
+   - Implemented cascade protection to prevent UI state inconsistencies
+   - Added multiple validation points to ensure system stability
+
+USER INTERFACE SIMPLIFICATION
+---------------------------
+Date: 2025-05-01 15:45:00
+
+1. Removed continuous acquisition functionality:
+   - Completely removed all continuous acquisition code and related functions
+   - Simplified the acquisition interface to a single acquisition button
+   - Removed the update interval control
+   - Eliminated all timer-related code and state management
+   - Simplified the button layout for more straightforward operation
+
+2. Enhanced automatic ROI configuration:
+   - Added automatic detection and application of full sensor ROI on connect
+   - Implemented proactive ROI setting when connecting to the spectrometer
+   - Added fallback mechanisms when automatic setting fails
+   - Enhanced logging to provide feedback about ROI configuration
+   - Added error handling for cases where camera information is unavailable
+
+3. Improved interface reliability:
+   - Simplified the acquisition workflow to a single button with direct feedback
+   - Removed complex state management related to acquisition modes
+   - Enhanced code maintainability by eliminating timer-related issues
+   - Updated styles to reflect the simplified interface design
+   - Improved overall reliability by focusing on core functionality
+
+SPECTRUM PROCESSING AND VISUALIZATION ENHANCEMENTS
+-----------------------------------------------
+Date: 2025-05-01 17:30:00
+
+1. Improved spectrum calculation algorithm:
+   - Changed from summing pixel intensities to averaging along vertical axis
+   - Implemented more accurate representation of spectral data
+   - Added safeguards to handle zero-height ROIs
+   - Enhanced normalization for different ROI heights
+   - Maintained backward compatibility with fallback mechanism
+
+2. Added real-time sensor image visualization:
+   - Implemented grayscale sensor image display with red ROI overlay
+   - Added "Refresh Image" button for on-demand image updates
+   - Created new API endpoint for retrieving current ROI settings
+   - Enhanced image API to include ROI rectangle overlay
+   - Added loading indicators for image acquisition
+
+3. Enhanced user interface layout:
+   - Created dual-panel display with spectrum and sensor image
+   - Implemented responsive design for different screen sizes
+   - Added proper labeling and visual hierarchy
+   - Ensured image updates happen automatically after ROI changes
+   - Added caching prevention for the most up-to-date sensor images
+
+4. Improved visualization workflow:
+   - Automatic image refresh after spectrum acquisition
+   - Synchronized ROI display with current settings
+   - Enhanced error handling for image loading failures
+   - Added clear visual feedback during acquisition processes
+   - Improved layout to show both data representations simultaneously
+
+USER INTERFACE STREAMLINING
+-------------------------
+Date: 2025-05-01 19:15:00
+
+1. Simplified visualization interface:
+   - Removed sensor image display feature
+   - Restored original single-panel spectrum view
+   - Simplified layout to focus on spectrum visualization
+   - Streamlined user interface for essential functionality
+   - Improved responsiveness by reducing rendering requirements
+
+2. Retained key algorithm improvements:
+   - Preserved average-based spectrum calculation (vs. summing)
+   - Maintained safeguards for different ROI heights
+   - Kept normalization improvements for spectral data
+   - Retained all backend processing enhancements
+   - Preserved automatic full sensor ROI configuration
+
+3. Interface cleanup:
+   - Removed unused styles and layout elements
+   - Eliminated image-related event listeners and functions
+   - Simplified DOM structure for better maintenance
+   - Restored original control flow without image refreshes
+   - Maintained clean separation between UI and data processing 

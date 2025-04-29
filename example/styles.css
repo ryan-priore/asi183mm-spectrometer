@@ -173,13 +173,6 @@ button:disabled {
     margin-bottom: 15px;
 }
 
-.continuous-mode {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin-left: auto;
-}
-
 .spectrum-container {
     width: 100%;
     height: 300px;
@@ -268,5 +261,9 @@ button:disabled {
     
     .status-panel {
         margin-top: 10px;
+    }
+    
+    .spectrum-container {
+        height: 250px;
     }
 } 

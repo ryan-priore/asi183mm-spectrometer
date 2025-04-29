@@ -103,7 +103,6 @@
     <div>
         <h2>Test Acquisition</h2>
         <button id="test-dark">Acquire Dark Frame</button>
-        <button id="test-background">Acquire Background</button>
         <button id="test-spectrum">Acquire Spectrum</button>
     </div>
     
@@ -208,10 +207,6 @@
         
         document.getElementById('test-dark').addEventListener('click', () => {
             makeApiRequest('/acquire/dark', 'POST');
-        });
-        
-        document.getElementById('test-background').addEventListener('click', () => {
-            makeApiRequest('/acquire/background', 'POST');
         });
         
         document.getElementById('test-spectrum').addEventListener('click', () => {
