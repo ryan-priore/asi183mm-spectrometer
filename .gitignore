@@ -81,4 +81,8 @@ local_settings.py
 
 # Generated documentation
 docs/_build/
-docs/api/ 
+docs/api/
+
+# Debug files
+debug/
+debug_*.npy 

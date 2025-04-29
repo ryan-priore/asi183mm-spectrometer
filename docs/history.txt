@@ -5,6 +5,8 @@ This file documents the chronological development and changes made to the ASI183
 
 INITIAL PROJECT CREATION
 -----------------------
+Date: 2025-04-28 14:00:00
+
 - Created core project structure with src/, tests/, docs/, scripts/, and config/ directories
 - Implemented base functionality for camera control (camera.py)
 - Created spectrometer data processing module (spectrometer.py)
@@ -16,7 +18,7 @@ INITIAL PROJECT CREATION
 
 VIRTUAL ENVIRONMENT AND INSTALLATION IMPROVEMENTS
 ------------------------------------------------
-Date: 2025-04-28
+Date: 2025-04-28 15:00:00
 
 1. Virtual Environment Setup
    - Modified requirements.txt to make RPi.GPIO optional (preventing installation errors)
@@ -50,7 +52,7 @@ Date: 2025-04-28
 
 VERSION CONTROL PREPARATION
 --------------------------
-Date: 2025-04-28
+Date: 2025-04-28 15:30:25
 
 1. Added .gitignore file with comprehensive rules:
    - Excluded Python virtual environment directories (.venv, venv, etc.)
@@ -58,4 +60,106 @@ Date: 2025-04-28
    - Excluded log files and data directories (logs/, spectra/, test_images/)
    - Excluded OS-specific files (.DS_Store, Thumbs.db, etc.)
    - Excluded IDE-specific files (.idea/, .vscode/, etc.)
-   - Excluded environment variables and local configuration files 
+   - Excluded environment variables and local configuration files
+
+DOCUMENTATION IMPROVEMENTS
+-------------------------
+Date: 2025-04-28 15:35:42
+
+1. Enhanced history.txt timestamp format:
+   - Updated all timestamps to include both date and time (YYYY-MM-DD HH:MM:SS)
+   - Added timestamp to Initial Project Creation entry (estimated)
+   - Added consistent timestamp format throughout document for better chronological tracking
+
+CAMERA CONNECTION FIXES
+---------------------
+Date: 2025-04-28 21:51:48
+
+1. Fixed camera connection reliability:
+   - Added strategic delays in camera connection process to allow driver initialization
+   - Added 1 second delay after SDK initialization
+   - Added 0.5 second delay after creating camera object
+   - Added 0.1 second delay after applying camera settings
+   - Created simple test_asi.py script to verify direct camera connectivity
+
+2. Added USB device permissions:
+   - Created udev rules file (99-asi-cameras.rules) for the ASI183MM camera
+   - Added rule to set appropriate permissions for USB device access
+
+CAMERA IMPLEMENTATION IMPROVEMENTS
+--------------------------------
+Date: 2025-04-28 21:55:31
+
+1. Redesigned camera capture method:
+   - Replaced standard capture() with more reliable manual exposure control
+   - Implemented explicit start_exposure() and get_data_after_exposure() approach
+   - Added proper timing calculations based on exposure settings
+   - Added status checking and additional wait times for reliability
+
+2. Enhanced camera connection process:
+   - Increased delay times for more reliable camera initialization
+   - Added checks to ensure camera is available before attempting connection
+   - Added debug logging for easier troubleshooting
+   - Modified test_camera.py to use explicit SDK path parameter
+
+DIRECT CAMERA CONTROL IMPLEMENTATION
+----------------------------------
+Date: 2025-04-28 21:59:12
+
+1. Created direct camera test script:
+   - Implemented test_direct_camera.py that bypasses the camera module
+   - Works directly with zwoasi library for more reliable operation
+   - Successfully captures full frame and ROI images
+   - Generates simulated spectrum data from ROI
+   - Correctly converts raw byte data to NumPy arrays with proper dimensions
+
+2. Provided fallback for testing:
+   - Added direct access approach as fallback for camera module issues
+   - Implemented proper error handling and logging
+   - Created alternative for when class-based approach encounters issues
+   - Successfully tested full acquisition workflow with camera hardware 
+
+TEST SCRIPT CONSOLIDATION AND CAMERA MODULE IMPROVEMENTS
+-------------------------------------------------------
+Date: 2025-04-29 01:55:00
+
+1. Consolidated test scripts:
+   - Merged functionality from test_asi.py and test_direct_camera.py into tests/test_camera.py
+   - Created comprehensive test script with both direct API and camera module testing modes
+   - Added command-line flags for selective testing (--direct-only, --module-only)
+   - Added detailed test summary and improved logging
+   - Implemented automatic SDK path detection from common locations
+
+2. Improved camera module reliability:
+   - Enhanced error handling and debugging in src/camera.py
+   - Added detailed logging for each step of the camera connection process
+   - Added proper handling of bytearray data returned from the camera
+   - Fixed conversion from raw image data to NumPy arrays
+   - Made capture_raw() method more robust with better dimension detection
+   - Added granular exception handling for each camera operation
+
+3. Project organization and cleanup:
+   - Moved debug_camera.py from root directory to scripts/ with enhanced documentation
+   - Moved 99-asi-cameras.rules from root directory to config/udev/ with better comments
+   - Updated install.sh to include udev rules installation
+   - Added udev rules documentation to README.md
+   - Implemented timeout protection in debug script to prevent hanging
+   - Added proper path handling for more reliable operation
+   - Improved disconnection handling to ensure camera resources are released 
+
+DEBUG FUNCTIONALITY INTEGRATION
+-----------------------------
+Date: 2025-04-29 02:10:00
+
+1. Enhanced test script with debug functionality:
+   - Integrated debug_camera.py functionality into tests/test_camera.py
+   - Added new --debug flag for running in diagnostic mode
+   - Implemented timeout protection for operations to prevent hanging
+   - Added more detailed logging for troubleshooting
+   - Created specialized output for diagnostic data analysis
+
+2. Project cleanup:
+   - Removed standalone debug_camera.py from scripts directory
+   - Added debug/ directory to .gitignore to prevent diagnostic data from being committed
+   - Updated README.md with documentation for debug mode
+   - Organized diagnostic data saving for offline analysis 

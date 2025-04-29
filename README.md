@@ -22,7 +22,7 @@ This project provides a backend control system for a spectrometer based on the A
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/asi183mm-spectrometer.git
+git clone https://github.com/ryan-priore/asi183mm-spectrometer.git
 cd asi183mm-spectrometer
 
 # Run the installation script
@@ -33,7 +33,7 @@ sudo ./scripts/install.sh
 
 ```
 # Clone the repository
-git clone https://github.com/your-username/asi183mm-spectrometer.git
+git clone https://github.com/ryan-priore/asi183mm-spectrometer.git
 cd asi183mm-spectrometer
 
 # Run the Windows setup script
@@ -44,7 +44,7 @@ scripts\setup_windows.bat
 
 1. Clone this repository:
    ```
-   git clone https://github.com/your-username/asi183mm-spectrometer.git
+   git clone https://github.com/ryan-priore/asi183mm-spectrometer.git
    cd asi183mm-spectrometer
    ```
 
@@ -71,14 +71,44 @@ scripts\setup_windows.bat
    pip install RPi.GPIO
    ```
 
-4. Set up the ZWO ASI SDK:
-   - Download and install the appropriate SDK for your platform from [ZWO's website](https://astronomy-imaging-camera.com/software-drivers)
-   - Set the environment variable: 
+4. Set up the ZWO ASI SDK
+   - Visit the official ZWO ASI Developer page: [ZWO SDK Download](https://www.zwoastro.com/software/)
+   - Download the latest SDK: [ASI_Camera_SDK.zip](https://dl.zwoastro.com/software?app=DeveloperCameraSdk&platform=windows86&region=Overseas)
+   - Extract the SDK
      ```
-     export ZWO_ASI_LIB=/path/to/asi/library.so  # Linux
+     unzip ASI_Camera_SDK.zip
+     cd ASI_Camera_SDK
+     tar -xf ASI_linux_mac_SDK_V1.36.tar.bz2
+     cd ASI_linux_mac_SDK_V1.36/lib/
+     sudo install asi.rules /lib/udev/rules.d
+     ```
+   - Copy SDK Files to System Libraries 
+     ```
+     cd armv8
+     sudo cp libASICamera2.so.1.36 /usr/local/lib/libASICamera2.so  # Linux
+     ```
+   - Update the library cache
+     ```
+     sudo ldconfig
+     export ZWO_ASI_LIB=/usr/local/lib/libASICamera2.so # Linux
+     # It is recommended to add the above line to the end of ~/.bashrc file as well
      # or
-     # set ZWO_ASI_LIB=C:\path\to\ASICamera2.dll  # Windows
+     # set ZWO_ASI_LIB=C:\path\to\ASICamera2.dll        # Windows
      ```
+
+### Setting up USB permissions (Linux only)
+
+For Linux systems, you'll need to set up udev rules to allow non-root users to access the camera:
+
+```bash
+# Copy the udev rules file to the system
+sudo cp config/udev/99-asi-cameras.rules /etc/udev/rules.d/
+
+# Reload udev rules and trigger devices
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+These rules give non-root users the necessary permissions to access the ASI183MM camera.
 
 ## Testing
 
@@ -107,7 +137,45 @@ python tests/test_camera.py
 python tests\test_camera.py
 ```
 
-This test will capture images, test ROI settings, and save sample data to a `test_images` directory.
+This comprehensive test will perform two types of tests:
+1. Direct ZWO API test (bypassing the ASI183Camera class)
+2. ASI183Camera module test (using the project's camera interface)
+
+The test will capture images, test ROI settings, and save sample data to a `test_images` directory.
+
+> **Note:** Due to limitations in the camera driver, running both tests sequentially may cause the second test to fail. If this happens, run each test separately using the `--direct-only` or `--module-only` flags.
+
+#### Test Options
+
+```bash
+# Run only the direct ZWO API test (useful for debugging hardware issues)
+python tests/test_camera.py --direct-only
+
+# Run only the ASI183Camera module test
+python tests/test_camera.py --module-only
+
+# Set custom exposure (in milliseconds) and gain
+python tests/test_camera.py --exposure 500 --gain 100
+
+# Specify custom SDK path
+python tests/test_camera.py --sdk-path /path/to/libASICamera2.so
+
+# Run in debug mode with timeout protection and save diagnostic data
+python tests/test_camera.py --debug
+```
+
+If you don't specify the SDK path, the test will try to find it in common locations or use the `ZWO_ASI_LIB` environment variable.
+
+#### Debug Mode
+
+The test script includes a special debug mode for troubleshooting camera issues. This mode:
+
+- Uses timeout protection to prevent the test from hanging
+- Captures only ROI images (avoiding large full-frame images)
+- Saves raw data for offline analysis in the `debug/` directory 
+- Sets more detailed logging output
+
+It's designed for diagnostic and troubleshooting purposes, especially when the camera is behaving unexpectedly.
 
 ## Usage
 
@@ -140,10 +208,14 @@ Once the server is running, access the API at:
 ## Project Structure
 
 - `src/`: Source code
+  - `main.py`: Main entry point
+  - `camera.py`: Camera interface for ASI183MM 
+  - `spectrometer.py`: Spectrometer data processing
+  - `api.py`: FastAPI REST endpoints
 - `config/`: Configuration files
 - `docs/`: Documentation
 - `tests/`: Test files
-  - `test_camera.py`: Tests camera connectivity and image acquisition
+  - `test_camera.py`: Comprehensive camera test suite (direct API and module tests)
   - `test_env.py`: Environment verification script (no hardware required)
 - `scripts/`: Utility scripts
   - `install.sh`: Linux/Raspberry Pi installation script

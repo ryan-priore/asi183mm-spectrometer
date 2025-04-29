@@ -34,6 +34,9 @@ class ASI183Camera:
             asi.init(env_path)
         else:
             raise ValueError("SDK path not provided and ZWO_ASI_LIB environment variable not set")
+        
+        # Add a short delay after initialization to let the driver stabilize
+        time.sleep(1)
             
         # Check for cameras
         num_cameras = asi.get_num_cameras()
@@ -54,11 +57,46 @@ class ASI183Camera:
             True if connection successful
         """
         try:
-            self.camera = asi.Camera(camera_id)
-            self.camera_info = self.camera.get_camera_property()
+            # Make sure SDK is initialized
+            if len(self.cameras_found) == 0:
+                logger.error("No cameras found during initialization")
+                return False
+                
+            # Use the same approach that works in test_asi.py
+            logger.debug(f"Opening camera {camera_id}")
+            try:
+                self.camera = asi.Camera(camera_id)
+                logger.debug(f"Successfully created camera object for ID {camera_id}")
+            except Exception as e:
+                logger.error(f"Failed to create camera object: {e}")
+                return False
+            
+            # Add delay after creating camera object
+            logger.debug("Waiting after camera creation...")
+            time.sleep(1.0)
+            
+            # Get camera info
+            logger.debug("Getting camera properties")
+            try:
+                self.camera_info = self.camera.get_camera_property()
+                logger.debug(f"Camera properties: {self.camera_info['Name']}, {self.camera_info['MaxWidth']}x{self.camera_info['MaxHeight']}")
+            except Exception as e:
+                logger.error(f"Failed to get camera properties: {e}")
+                return False
+            
+            # Additional delay
+            logger.debug("Waiting after getting properties...")
+            time.sleep(0.5)
             
             # Set some default settings appropriate for spectroscopy
-            self.setup_defaults()
+            logger.debug("Setting up default parameters")
+            try:
+                self.setup_defaults()
+                logger.debug("Default parameters set successfully")
+            except Exception as e:
+                logger.error(f"Failed to set default parameters: {e}")
+                # Continue anyway - some cameras might work without setting defaults
+                pass
             
             self.connected = True
             logger.info(f"Connected to {self.camera_info['Name']}")
@@ -70,28 +108,80 @@ class ASI183Camera:
     
     def setup_defaults(self) -> None:
         """Set default camera settings optimized for spectroscopy"""
-        if not self.connected or not self.camera:
-            raise RuntimeError("Camera not connected")
+        if not self.camera:
+            raise RuntimeError("Camera not initialized")
             
-        # Use minimum USB bandwidth to avoid transfer issues
-        controls = self.camera.get_controls()
-        self.camera.set_control_value(
-            asi.ASI_BANDWIDTHOVERLOAD, 
-            controls['BandWidth']['MinValue']
-        )
+        logger.debug("Setting up default parameters for camera")
         
-        # Set for monochrome imaging
-        self.camera.set_image_type(asi.ASI_IMG_RAW16)  # 16-bit for better dynamic range
-        
-        # Default settings - these should be configurable via the API
-        self.camera.set_control_value(asi.ASI_GAIN, 0)  # Minimum gain for less noise
-        self.camera.set_control_value(asi.ASI_EXPOSURE, 100000)  # 100ms exposure
-        self.camera.set_control_value(asi.ASI_GAMMA, 50)
-        self.camera.set_control_value(asi.ASI_BRIGHTNESS, 50)
-        self.camera.set_control_value(asi.ASI_FLIP, 0)
-        
-        # Disable auto settings
-        self.camera.disable_dark_subtract()
+        try:
+            # Use minimum USB bandwidth to avoid transfer issues
+            logger.debug("Getting camera controls")
+            controls = self.camera.get_controls()
+            logger.debug(f"Available controls: {list(controls.keys())}")
+            
+            logger.debug("Setting bandwidth")
+            self.camera.set_control_value(
+                asi.ASI_BANDWIDTHOVERLOAD, 
+                controls['BandWidth']['MinValue']
+            )
+            logger.debug("Bandwidth set successfully")
+            
+            # Set for monochrome imaging
+            logger.debug("Setting image type to RAW16")
+            self.camera.set_image_type(asi.ASI_IMG_RAW16)  # 16-bit for better dynamic range
+            logger.debug("Image type set successfully")
+            
+            # Default settings - these should be configurable via the API
+            logger.debug("Setting basic camera parameters")
+            
+            # Set each parameter in a separate try block to continue even if one fails
+            try:
+                self.camera.set_control_value(asi.ASI_GAIN, 0)  # Minimum gain for less noise
+                logger.debug("Gain set successfully")
+            except Exception as e:
+                logger.warning(f"Failed to set gain: {e}")
+                
+            try:
+                self.camera.set_control_value(asi.ASI_EXPOSURE, 100000)  # 100ms exposure
+                logger.debug("Exposure set successfully")
+            except Exception as e:
+                logger.warning(f"Failed to set exposure: {e}")
+                
+            try:
+                self.camera.set_control_value(asi.ASI_GAMMA, 50)
+                logger.debug("Gamma set successfully")
+            except Exception as e:
+                logger.warning(f"Failed to set gamma: {e}")
+                
+            try:
+                self.camera.set_control_value(asi.ASI_BRIGHTNESS, 50)
+                logger.debug("Brightness set successfully")
+            except Exception as e:
+                logger.warning(f"Failed to set brightness: {e}")
+                
+            try:
+                self.camera.set_control_value(asi.ASI_FLIP, 0)
+                logger.debug("Flip set successfully")
+            except Exception as e:
+                logger.warning(f"Failed to set flip: {e}")
+            
+            # Disable auto settings
+            try:
+                logger.debug("Disabling dark subtract")
+                self.camera.disable_dark_subtract()
+                logger.debug("Dark subtract disabled")
+            except Exception as e:
+                logger.warning(f"Failed to disable dark subtract: {e}")
+            
+            # Add a small delay after applying settings
+            logger.debug("Waiting after setting parameters")
+            time.sleep(0.1)
+            
+            logger.debug("Default setup completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error in setup_defaults: {e}")
+            raise
     
     def get_camera_info(self) -> Dict[str, Any]:
         """
@@ -194,21 +284,87 @@ class ASI183Camera:
         Returns:
             NumPy array containing the raw image data
         """
-        if not self.connected or not self.camera:
-            raise RuntimeError("Camera not connected")
+        if not self.camera:
+            raise RuntimeError("Camera not initialized")
+            
+        logger.debug("Beginning image capture process")
             
         # Stop any ongoing video capture
         try:
+            logger.debug("Stopping any existing video capture")
             self.camera.stop_video_capture()
-        except:
-            pass
+            logger.debug("Video capture stopped")
+        except Exception as e:
+            logger.debug(f"No video capture was running: {e}")
         
-        # Set timeout based on exposure time
-        exposure = self.camera.get_control_value(asi.ASI_EXPOSURE)[0]
-        timeout = (exposure / 1000) * 2 + 500  # 2x exposure + 500ms buffer
-        
-        # Capture the frame
-        return self.camera.capture()
+        try:
+            # Get current exposure
+            logger.debug("Getting current exposure value")
+            try:
+                exposure = self.camera.get_control_value(asi.ASI_EXPOSURE)[0]
+                logger.debug(f"Current exposure: {exposure/1000:.2f}ms")
+            except Exception as e:
+                logger.warning(f"Failed to get exposure value: {e}")
+                exposure = 100000  # Default to 100ms if can't get current value
+                logger.debug(f"Using default exposure: {exposure/1000:.2f}ms")
+            
+            # Start exposure explicitly instead of using single capture to be more reliable
+            logger.debug(f"Starting exposure with {exposure/1000:.2f}ms")
+            self.camera.start_exposure()
+            
+            # Calculate wait time with buffer
+            wait_time = (exposure / 1000.0) + 0.5  # Convert μs to s and add buffer
+            logger.debug(f"Waiting {wait_time:.2f}s for exposure to complete")
+            time.sleep(wait_time)
+            
+            # Check status
+            logger.debug("Checking exposure status")
+            status = self.camera.get_exposure_status()
+            logger.debug(f"Exposure status: {status}")
+            
+            if status != asi.ASI_EXP_SUCCESS:
+                logger.warning(f"Exposure not complete (status: {status}), waiting longer")
+                time.sleep(1.0)  # Wait a bit longer
+                status = self.camera.get_exposure_status()
+                logger.debug(f"Exposure status after additional wait: {status}")
+            
+            # Get data
+            logger.debug("Retrieving image data")
+            data = self.camera.get_data_after_exposure()
+            
+            # Convert data to numpy array with proper dimensions
+            if isinstance(data, (bytes, bytearray)):
+                logger.debug("Converting byte data to numpy array")
+                
+                # Determine dimensions based on camera info
+                if hasattr(self, 'camera_info'):
+                    width = self.camera_info['MaxWidth']
+                    height = self.camera_info['MaxHeight']
+                    
+                    # Adjust for ROI if set
+                    if hasattr(self.camera, 'get_roi'):
+                        try:
+                            roi = self.camera.get_roi()
+                            width = roi[2]
+                            height = roi[3]
+                            logger.debug(f"Using ROI dimensions: {width}x{height}")
+                        except:
+                            logger.debug(f"Using default dimensions: {width}x{height}")
+                    
+                    # Convert bytes to numpy array
+                    logger.debug("Converting to numpy array")
+                    return np.frombuffer(data, dtype=np.uint16).reshape((height, width))
+                else:
+                    logger.warning("Camera info not available, returning raw data")
+                    return data
+            else:
+                # If already a numpy array, just return it
+                logger.debug(f"Data is already a numpy array with shape {data.shape}")
+                return data
+            
+        except Exception as e:
+            logger.error(f"Error capturing image: {e}")
+            raise
     
     def capture_spectrum(self) -> Tuple[np.ndarray, np.ndarray]:
         """

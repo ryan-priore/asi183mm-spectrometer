@@ -120,6 +120,33 @@ chmod +x scripts/run_server.sh
 chmod +x tests/test_env.py
 chmod +x tests/test_camera.py
 
+# Add a section for udev rules installation
+install_udev_rules() {
+    echo "Installing udev rules for camera access..."
+    
+    # Check if we're running as root (needed for udev rules)
+    if [ "$EUID" -ne 0 ]; then
+        echo "Skipping udev rules installation - not running as root"
+        echo "You can install them manually with:"
+        echo "  sudo cp config/udev/99-asi-cameras.rules /etc/udev/rules.d/"
+        echo "  sudo udevadm control --reload-rules && sudo udevadm trigger"
+        return
+    fi
+    
+    # Copy rules file
+    cp config/udev/99-asi-cameras.rules /etc/udev/rules.d/
+    
+    # Reload rules and trigger
+    udevadm control --reload-rules
+    udevadm trigger
+    
+    echo "udev rules installed successfully"
+}
+
+# Add this function call to the appropriate place in the script, 
+# likely after SDK installation but before finishing
+install_udev_rules
+
 echo -e "${GREEN}Installation complete!${NC}"
 echo ""
 echo -e "${GREEN}To run the test script to verify your environment:${NC}"
