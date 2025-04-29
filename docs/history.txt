@@ -163,3 +163,75 @@ Date: 2025-04-29 02:10:00
    - Added debug/ directory to .gitignore to prevent diagnostic data from being committed
    - Updated README.md with documentation for debug mode
    - Organized diagnostic data saving for offline analysis 
+
+WEB INTERFACE EXAMPLE IMPLEMENTATION
+----------------------------------
+Date: 2025-04-30 11:45:00
+
+1. Created comprehensive web interface example:
+   - Added a new example/ directory with complete web client implementation
+   - Created modern, responsive HTML/CSS interface (index.html, styles.css)
+   - Implemented full JavaScript client for API interaction (script.js)
+   - Developed a canvas-based spectrum visualization system
+   - Added detailed README.md with usage instructions
+   - Created a helper server script (serve.py) for easy client deployment
+
+2. Interface features and capabilities:
+   - Complete spectrometer control through user-friendly UI
+   - Camera connection management with status indicators
+   - Exposure time and gain adjustment controls
+   - ROI configuration with start position, dimensions, and binning options
+   - Wavelength calibration coefficient settings
+   - Dark frame and background acquisition
+   - Single and continuous spectrum acquisition modes with adjustable intervals
+   - Real-time spectrum visualization with proper axes and scaling
+   - Spectrum statistics display (min, max, average values)
+   - CSV data export functionality (download and clipboard copy)
+   - Detailed operation logging with timestamp and message type differentiation
+
+3. Technical implementation:
+   - Modern JavaScript with async/await pattern for API requests
+   - Canvas-based graphing with proper axes, labels, and scaling
+   - Responsive design with grid layout for various screen sizes
+   - Comprehensive error handling with user feedback
+   - Event-based design for UI interactivity
+   - State management for tracking spectrometer status
+   - Interval-based continuous acquisition mode
+
+4. Usability improvements:
+   - Automatic browser launch on server start
+   - Command-line options for port configuration
+   - Detailed logging of all operations
+   - Clear visual indicators of connection status
+   - Disabled controls when operations not available
+   - Easy-to-use server script with helpful messages 
+
+API AND WEB INTERFACE BUGFIXES
+-----------------------------
+Date: 2025-04-30 14:30:00
+
+1. Fixed API endpoint issues:
+   - Corrected a critical bug in the dark frame and background frame acquisition endpoints
+   - Fixed the 'tuple' object has no attribute 'tolist' error by using list() to convert shape tuples
+   - Updated error handling in acquisition endpoints to provide better diagnostic information
+   - Improved response format consistency across various endpoints
+
+2. Updated web interface to match API endpoints:
+   - Corrected the API base URL from '/api/spectrometer' to the correct root path
+   - Fixed endpoint paths for spectrum acquisition ('/acquire/spectrum' instead of '/spectrum')
+   - Updated dark frame and background frame acquisition endpoints ('/acquire/dark' and '/acquire/background')
+   - Fixed the gain setting to use the exposure endpoint instead of a non-existent '/gain' endpoint
+   - Corrected wavelength calibration parameter format to match API expectations
+
+3. Added diagnostic tools:
+   - Created a test.html page to directly test API endpoints with proper parameters
+   - Added comprehensive endpoint tests for all major functions
+   - Implemented real-time feedback for debugging API interactions
+   - Designed the test interface to show detailed error messages and responses
+
+4. Documentation and usability improvements:
+   - Updated API parameter documentation for clarity
+   - Enhanced error messages with actionable information
+   - Implemented more robust error handling in client-side code
+   - Added debugging tools to help diagnose connection issues
+   - Improved the user experience with better status feedback during operations 

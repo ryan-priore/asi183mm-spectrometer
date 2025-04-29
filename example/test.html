@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASI183MM API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        button {
+            padding: 10px;
+            margin: 5px;
+        }
+        .error {
+            color: red;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+        }
+        input {
+            padding: 5px;
+            width: 80px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ASI183MM API Test</h1>
+    <div>
+        <h2>Test API Connection</h2>
+        <button id="test-root">Test Root Endpoint</button>
+        <button id="test-status">Test Status Endpoint</button>
+        <button id="test-connect">Test Connect Endpoint</button>
+    </div>
+    
+    <div>
+        <h2>Test Settings</h2>
+        <div class="form-group">
+            <label for="exposure">Exposure (ms):</label>
+            <input type="number" id="exposure" value="100">
+        </div>
+        <div class="form-group">
+            <label for="gain">Gain:</label>
+            <input type="number" id="gain" value="0">
+        </div>
+        <button id="test-exposure">Set Exposure & Gain</button>
+        
+        <div class="form-group" style="margin-top: 15px;">
+            <label for="coef0">Coefficient 0:</label>
+            <input type="number" id="coef0" value="400" step="0.1">
+        </div>
+        <div class="form-group">
+            <label for="coef1">Coefficient 1:</label>
+            <input type="number" id="coef1" value="0.5" step="0.001">
+        </div>
+        <div class="form-group">
+            <label for="coef2">Coefficient 2:</label>
+            <input type="number" id="coef2" value="0" step="0.0001">
+        </div>
+        <button id="test-calibration">Set Calibration</button>
+        
+        <div class="form-group" style="margin-top: 15px;">
+            <label for="roi-start-x">ROI Start X:</label>
+            <input type="number" id="roi-start-x" value="0">
+        </div>
+        <div class="form-group">
+            <label for="roi-start-y">ROI Start Y:</label>
+            <input type="number" id="roi-start-y" value="700">
+        </div>
+        <div class="form-group">
+            <label for="roi-width">ROI Width:</label>
+            <input type="number" id="roi-width" value="4096">
+        </div>
+        <div class="form-group">
+            <label for="roi-height">ROI Height:</label>
+            <input type="number" id="roi-height" value="100">
+        </div>
+        <div class="form-group">
+            <label for="roi-binning">ROI Binning:</label>
+            <select id="roi-binning">
+                <option value="1">1x1</option>
+                <option value="2">2x2</option>
+                <option value="3">3x3</option>
+                <option value="4">4x4</option>
+            </select>
+        </div>
+        <button id="test-roi">Set ROI</button>
+    </div>
+    
+    <div>
+        <h2>Test Acquisition</h2>
+        <button id="test-dark">Acquire Dark Frame</button>
+        <button id="test-background">Acquire Background</button>
+        <button id="test-spectrum">Acquire Spectrum</button>
+    </div>
+    
+    <div>
+        <h2>API Response:</h2>
+        <pre id="response">Click a button to test the API...</pre>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const responseElement = document.getElementById('response');
+
+        // Helper function to make API requests
+        async function makeApiRequest(endpoint, method = 'GET', data = null) {
+            responseElement.textContent = `Requesting ${method} ${API_URL}${endpoint}...`;
+            responseElement.className = '';
+            
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin'
+                };
+                
+                if (data && (method === 'POST' || method === 'PUT')) {
+                    options.body = JSON.stringify(data);
+                }
+                
+                const response = await fetch(`${API_URL}${endpoint}`, options);
+                const contentType = response.headers.get('content-type');
+                
+                if (!response.ok) {
+                    let errorText = `Error: ${response.status} ${response.statusText}`;
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        errorText += `\n\n${JSON.stringify(errorData, null, 2)}`;
+                    }
+                    throw new Error(errorText);
+                }
+                
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    responseElement.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    responseElement.textContent = await response.text();
+                }
+            } catch (error) {
+                responseElement.textContent = error.message;
+                responseElement.className = 'error';
+            }
+        }
+
+        // Set up event listeners
+        document.getElementById('test-root').addEventListener('click', () => {
+            makeApiRequest('/');
+        });
+        
+        document.getElementById('test-status').addEventListener('click', () => {
+            makeApiRequest('/status');
+        });
+        
+        document.getElementById('test-connect').addEventListener('click', () => {
+            makeApiRequest('/connect', 'POST');
+        });
+        
+        document.getElementById('test-exposure').addEventListener('click', () => {
+            const exposure = parseInt(document.getElementById('exposure').value);
+            const gain = parseInt(document.getElementById('gain').value);
+            
+            makeApiRequest('/exposure', 'POST', {
+                exposure_ms: exposure,
+                gain: gain
+            });
+        });
+        
+        document.getElementById('test-calibration').addEventListener('click', () => {
+            const coefficients = [
+                parseFloat(document.getElementById('coef0').value),
+                parseFloat(document.getElementById('coef1').value),
+                parseFloat(document.getElementById('coef2').value)
+            ];
+            
+            makeApiRequest('/calibration', 'POST', {
+                coefficients: coefficients
+            });
+        });
+        
+        document.getElementById('test-roi').addEventListener('click', () => {
+            const roi = {
+                start_x: parseInt(document.getElementById('roi-start-x').value),
+                start_y: parseInt(document.getElementById('roi-start-y').value),
+                width: parseInt(document.getElementById('roi-width').value),
+                height: parseInt(document.getElementById('roi-height').value),
+                binning: parseInt(document.getElementById('roi-binning').value)
+            };
+            
+            makeApiRequest('/roi', 'POST', roi);
+        });
+        
+        document.getElementById('test-dark').addEventListener('click', () => {
+            makeApiRequest('/acquire/dark', 'POST');
+        });
+        
+        document.getElementById('test-background').addEventListener('click', () => {
+            makeApiRequest('/acquire/background', 'POST');
+        });
+        
+        document.getElementById('test-spectrum').addEventListener('click', () => {
+            makeApiRequest('/acquire/spectrum', 'GET');
+        });
+    </script>
+</body>
+</html> 

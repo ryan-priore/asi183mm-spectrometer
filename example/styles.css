@@ -1,0 +1,272 @@
+/* Modern CSS styles for the ASI183MM Spectrometer Control Interface */
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #3498db;
+    --accent-color: #e74c3c;
+    --background-color: #f5f7fa;
+    --panel-color: #ffffff;
+    --text-color: #333333;
+    --border-color: #dcdfe6;
+    --success-color: #27ae60;
+    --warning-color: #f39c12;
+    --error-color: #c0392b;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+header h1 {
+    color: var(--primary-color);
+    font-size: 24px;
+}
+
+.status-panel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.disconnected {
+    background-color: var(--error-color);
+    color: white;
+}
+
+.connected {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.connecting {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.main-content {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+}
+
+.settings-panel, .acquisition-panel, .log-panel {
+    background-color: var(--panel-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+h2 {
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 20px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+h3 {
+    font-size: 16px;
+    margin: 15px 0 10px;
+    color: var(--primary-color);
+}
+
+.settings-group {
+    margin-bottom: 20px;
+}
+
+.form-group {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+}
+
+label {
+    display: inline-block;
+    width: 120px;
+    font-size: 14px;
+}
+
+input, select {
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 14px;
+    width: 100px;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.3);
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 15px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.primary-btn {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.primary-btn:hover {
+    background-color: #2980b9;
+}
+
+.secondary-btn {
+    background-color: #ecf0f1;
+    color: var(--primary-color);
+    margin-left: 10px;
+}
+
+.secondary-btn:hover {
+    background-color: #dfe6e9;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.acquisition-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.continuous-mode {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+}
+
+.spectrum-container {
+    width: 100%;
+    height: 300px;
+    background-color: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 15px;
+    position: relative;
+    overflow: hidden;
+}
+
+#spectrum-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.spectrum-info {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 12px;
+    display: flex;
+    gap: 10px;
+}
+
+.data-export {
+    display: flex;
+    gap: 10px;
+}
+
+.log-panel {
+    grid-column: 1 / span 2;
+}
+
+#log-container {
+    height: 150px;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+
+.log-entry {
+    margin-bottom: 5px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 2px;
+}
+
+.log-info {
+    color: var(--text-color);
+}
+
+.log-success {
+    color: var(--success-color);
+}
+
+.log-error {
+    color: var(--error-color);
+}
+
+.log-warning {
+    color: var(--warning-color);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .main-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .settings-panel, .acquisition-panel, .log-panel {
+        grid-column: 1;
+    }
+    
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .status-panel {
+        margin-top: 10px;
+    }
+} 

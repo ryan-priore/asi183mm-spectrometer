@@ -229,7 +229,7 @@ async def acquire_dark(spectrometer: Spectrometer = Depends(get_spectrometer)):
     """Acquire a dark frame"""
     try:
         dark_frame = spectrometer.acquire_dark_frame()
-        return {"message": "Dark frame acquired", "shape": dark_frame.shape.tolist()}
+        return {"message": "Dark frame acquired", "shape": list(dark_frame.shape)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to acquire dark frame: {str(e)}")
 
@@ -238,7 +238,7 @@ async def acquire_background(spectrometer: Spectrometer = Depends(get_spectromet
     """Acquire a background frame"""
     try:
         bg_frame = spectrometer.acquire_background_frame()
-        return {"message": "Background frame acquired", "shape": bg_frame.shape.tolist()}
+        return {"message": "Background frame acquired", "shape": list(bg_frame.shape)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to acquire background: {str(e)}")
 
