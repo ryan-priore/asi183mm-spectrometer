@@ -199,6 +199,42 @@ class Spectrometer:
         
         return wavelengths, spectrum
     
+    def process_spectrum(self, raw_image: np.ndarray, 
+                       subtract_dark: Optional[bool] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Process a raw image into a spectrum
+        
+        Args:
+            raw_image: Raw 2D image data
+            subtract_dark: Whether to subtract dark frame (None uses default setting)
+            
+        Returns:
+            Tuple of (wavelengths, intensities) as NumPy arrays
+        """
+        if not self.connected:
+            raise RuntimeError("Spectrometer not connected")
+            
+        # Use instance defaults if not specified
+        if subtract_dark is None:
+            subtract_dark = self.subtract_dark
+            
+        # Apply dark frame correction if needed
+        if subtract_dark and self.dark_frame is not None:
+            if raw_image.shape == self.dark_frame.shape:
+                raw_image = raw_image - self.dark_frame
+                raw_image = np.clip(raw_image, 0, None)  # Prevent negative values
+            else:
+                logger.warning("Dark frame shape mismatch, skipping subtraction")
+                
+        # Get maximum value of each column for full ADC range (optimized version)
+        spectrum = np.max(raw_image, axis=0)
+            
+        # Create wavelength mapping just once (more efficient than per-pixel conversion)
+        pixel_positions = np.arange(len(spectrum))
+        wavelengths = self.pixel_to_wavelength(pixel_positions)
+        
+        return wavelengths, spectrum
+    
     def set_wavelength_calibration(self, coefficients: List[float]) -> None:
         """
         Set wavelength calibration coefficients

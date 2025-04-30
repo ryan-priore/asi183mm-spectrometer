@@ -263,6 +263,60 @@ Date: 2025-04-30 18:30:00
    - Updated history.txt to document the removal of background functionality
    - Maintained all dark frame acquisition functionality without changes
 
+SPECTRUM CALCULATION AND PROCESSING IMPROVEMENTS
+----------------------------------------------
+Date: 2025-04-30 20:15:00
+
+1. Enhanced spectrum calculation method:
+   - Modified the spectrum calculation to use np.max() instead of np.mean()
+   - Updated the implementation to show the full 16-bit ADC range (0-65535)
+   - Improved Y-axis representation to show actual intensity values
+   - Fixed issue where changing exposure time didn't affect the Y-axis values
+
+2. Simplified processing pipeline:
+   - Removed all smoothing functionality from both backend and frontend
+   - Eliminated unnecessary data filtering to show raw sensor data
+   - Updated API endpoints to reflect removal of smoothing parameters
+   - Fixed errors in the status endpoint related to removed smoothing attributes
+   - Simplified code for better performance and maintenance
+
+3. Interface simplifications:
+   - Removed Y Range Min/Max input controls
+   - Removed the Set Range button
+   - Eliminated Min/Max/Avg text overlay from spectrum display
+   - Created cleaner visualization focused on raw spectral data
+
+IMAGE ACQUISITION AND PERFORMANCE IMPROVEMENTS
+---------------------------------------------
+Date: 2025-04-30 23:45:00
+
+1. Added dedicated image acquisition:
+   - Created separate "Acquire Image" button in the interface
+   - Implemented image display functionality showing camera output
+   - Added initial client-side image scaling (50%) with loading indicators
+   - Implemented responsive image handling with proper error states
+
+2. Backend optimization for image acquisition:
+   - Added process_spectrum method to Spectrometer class to handle raw image data
+   - Modified the acquire_spectrum endpoint to include base64-encoded image data
+   - Updated the SpectrumResponse model to include image_data field
+   - Fixed critical error in API endpoint that prevented spectrum acquisition
+
+3. Frontend image caching implementation:
+   - Modified appState to store image data from spectrum acquisition
+   - Updated acquireSpectrum function to request and cache image data
+   - Enhanced acquireImage function to check for cached image data
+   - Implemented fast image display from cache when available
+   - Added fallback to API request only when cache is unavailable
+   - Added informative user feedback in the log about image data source
+
+4. Performance optimizations:
+   - Eliminated redundant camera operations by reusing image data
+   - Reduced network traffic by avoiding duplicate image requests
+   - Improved user experience with faster image display
+   - Added proper loading indicators during acquisition
+   - Implemented error handling with helpful feedback
+
 ACQUISITION INTERFACE IMPROVEMENT
 ------------------------------
 Date: 2025-05-01 10:45:00

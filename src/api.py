@@ -80,6 +80,7 @@ class SpectrumResponse(BaseModel):
     timestamp: float = Field(..., description="Acquisition timestamp")
     exposure_ms: int = Field(..., description="Exposure time used")
     gain: int = Field(..., description="Gain value used")
+    image_data: Optional[str] = Field(None, description="Base64 encoded image data")
 
 # Helper functions
 def get_spectrometer() -> Spectrometer:
@@ -225,6 +226,7 @@ async def acquire_dark(spectrometer: Spectrometer = Depends(get_spectrometer)):
 @app.get("/acquire/spectrum", tags=["Acquisition"], response_model=SpectrumResponse)
 async def acquire_spectrum(
     subtract_dark: Optional[bool] = Query(None, description="Whether to subtract dark frame"),
+    include_image: Optional[bool] = Query(True, description="Whether to include base64-encoded image data"),
     spectrometer: Spectrometer = Depends(get_spectrometer)
 ):
     """Acquire a spectrum"""
@@ -232,19 +234,50 @@ async def acquire_spectrum(
         # Get current settings before acquisition
         settings = spectrometer.camera.get_settings()
         
-        # Acquire the spectrum
-        wavelengths, intensities = spectrometer.acquire_spectrum(
+        # Acquire raw image data first
+        raw_image = spectrometer.acquire_spectrum(return_raw=True)
+        
+        # Process the spectrum using the raw image
+        wavelengths, intensities = spectrometer.process_spectrum(
+            raw_image,
             subtract_dark=subtract_dark
         )
         
         # Convert to lists for JSON serialization
-        return {
+        response_data = {
             "wavelengths": wavelengths.tolist(),
             "intensities": intensities.tolist(),
             "timestamp": time.time(),
             "exposure_ms": settings.get("Exposure", 0),
-            "gain": settings.get("Gain", 0)
+            "gain": settings.get("Gain", 0),
+            "image_data": None
         }
+        
+        # Include image data if requested
+        if include_image:
+            # Convert the raw image to a displayable format
+            # Create a PIL Image from the raw data
+            img_min = np.min(raw_image)
+            img_max = np.max(raw_image)
+            if img_max > img_min:
+                img_norm = ((raw_image - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+            else:
+                img_norm = np.zeros_like(raw_image, dtype=np.uint8)
+            
+            # Convert to PIL image and save as JPEG
+            from PIL import Image
+            img_pil = Image.fromarray(img_norm)
+            
+            # Save as JPEG to buffer
+            buffer = BytesIO()
+            img_pil.save(buffer, format="JPEG", quality=85)
+            buffer.seek(0)
+            
+            # Encode as base64
+            image_base64 = base64.b64encode(buffer.read()).decode("utf-8")
+            response_data["image_data"] = f"data:image/jpeg;base64,{image_base64}"
+        
+        return response_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to acquire spectrum: {str(e)}")
 

@@ -189,19 +189,6 @@ button:disabled {
     height: 100%;
 }
 
-.spectrum-info {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background-color: rgba(255, 255, 255, 0.8);
-    border-radius: 4px;
-    padding: 5px 10px;
-    font-size: 12px;
-    display: flex;
-    gap: 10px;
-    z-index: 1000;
-}
-
 .plot-controls {
     display: flex;
     flex-wrap: wrap;
@@ -225,6 +212,53 @@ button:disabled {
 .data-export {
     display: flex;
     gap: 10px;
+}
+
+.image-container {
+    width: 100%;
+    height: 300px;
+    background-color: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.image-container::after {
+    content: attr(data-status);
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--text-color);
+    font-size: 16px;
+    padding: 10px 15px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    z-index: 2;
+}
+
+.image-container.loading::after {
+    display: block;
+    content: "Loading...";
+}
+
+.image-container.error::after {
+    display: block;
+    content: "Error loading image";
+    background-color: rgba(255, 0, 0, 0.1);
+}
+
+#camera-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: none; /* Hidden by default until an image is loaded */
 }
 
 .log-panel {

@@ -16,7 +16,8 @@ const appState = {
     currentSpectrum: null,
     wavelengths: null,
     darkFrame: null,
-    plotLayout: null
+    plotLayout: null,
+    imageData: null  // Add this to store the image data
 };
 
 // DOM elements
@@ -52,20 +53,18 @@ const elements = {
     
     // Spectrum display
     spectrumPlot: document.getElementById('spectrum-plot'),
-    minValue: document.getElementById('min-value'),
-    maxValue: document.getElementById('max-value'),
-    avgValue: document.getElementById('avg-value'),
     
     // Plot controls
     autoScaleBtn: document.getElementById('auto-scale-btn'),
     fullRangeBtn: document.getElementById('full-range-btn'),
-    setRangeBtn: document.getElementById('set-range-btn'),
-    yMin: document.getElementById('y-min'),
-    yMax: document.getElementById('y-max'),
     
     // Data export
     saveSpectrumBtn: document.getElementById('save-spectrum-btn'),
     copyDataBtn: document.getElementById('copy-data-btn'),
+    
+    // Image acquisition
+    acquireImageBtn: document.getElementById('acquire-image-btn'),
+    cameraImage: document.getElementById('camera-image'),
     
     // Log
     logContainer: document.getElementById('log-container'),
@@ -83,9 +82,9 @@ function initApp() {
     elements.setCalibrationBtn.addEventListener('click', setCalibration);
     elements.acquireDarkBtn.addEventListener('click', acquireDark);
     elements.acquireSpectrumBtn.addEventListener('click', acquireSpectrum);
+    elements.acquireImageBtn.addEventListener('click', acquireImage);
     elements.autoScaleBtn.addEventListener('click', autoScalePlot);
     elements.fullRangeBtn.addEventListener('click', setFullRange);
-    elements.setRangeBtn.addEventListener('click', setYAxisRange);
     elements.saveSpectrumBtn.addEventListener('click', saveSpectrum);
     elements.copyDataBtn.addEventListener('click', copyData);
     elements.clearLogBtn.addEventListener('click', clearLog);
@@ -369,11 +368,17 @@ async function acquireDark() {
 async function acquireSpectrum() {
     try {
         logMessage('Acquiring spectrum...', 'info');
-        const spectrumData = await apiRequest('/acquire/spectrum', 'GET');
+        const spectrumData = await apiRequest('/acquire/spectrum?include_image=true', 'GET');
         
         // Store the spectrum data and update display
         appState.wavelengths = spectrumData.wavelengths;
         appState.currentSpectrum = spectrumData.intensities;
+        
+        // Store the image data if available
+        if (spectrumData.image_data) {
+            appState.imageData = spectrumData.image_data;
+            logMessage('Image data cached from spectrum acquisition', 'info');
+        }
         
         // Draw spectrum
         drawSpectrum(appState.wavelengths, appState.currentSpectrum);
@@ -412,9 +417,6 @@ function drawSpectrum(wavelengths, intensities) {
         modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
         displaylogo: false
     });
-    
-    // Update stats display
-    updateSpectrumStats(intensities);
 }
 
 // Auto-scale the y-axis
@@ -452,48 +454,6 @@ function setFullRange() {
     appState.plotLayout.yaxis.range = [0, 65535];
     
     logMessage('Y-axis set to full 16-bit range (0-65535)', 'info');
-}
-
-// Set a fixed y-axis range
-function setYAxisRange() {
-    if (!appState.wavelengths || !appState.currentSpectrum) {
-        logMessage('No spectrum data to set range for', 'warning');
-        return;
-    }
-    
-    const yMin = parseFloat(elements.yMin.value);
-    const yMax = parseFloat(elements.yMax.value);
-    
-    if (!isNaN(yMin) && !isNaN(yMax) && yMin < yMax) {
-        Plotly.relayout('spectrum-plot', {
-            'yaxis.autorange': false,
-            'yaxis.range': [yMin, yMax]
-        });
-        
-        // Update the stored layout
-        appState.plotLayout.yaxis.autorange = false;
-        appState.plotLayout.yaxis.range = [yMin, yMax];
-        
-        logMessage(`Y-axis range set to [${yMin}, ${yMax}]`, 'info');
-    } else {
-        logMessage('Invalid Y-axis range', 'error');
-    }
-}
-
-// Update spectrum statistics
-function updateSpectrumStats(intensities) {
-    if (!intensities || intensities.length === 0) {
-        return;
-    }
-    
-    const min = Math.min(...intensities);
-    const max = Math.max(...intensities);
-    const sum = intensities.reduce((a, b) => a + b, 0);
-    const avg = sum / intensities.length;
-    
-    elements.minValue.textContent = min.toFixed(2);
-    elements.maxValue.textContent = max.toFixed(2);
-    elements.avgValue.textContent = avg.toFixed(2);
 }
 
 // Save spectrum data
@@ -572,11 +532,9 @@ function toggleUIElements(connected) {
     elements.setCalibrationBtn.disabled = !connected;
     elements.acquireDarkBtn.disabled = !connected;
     elements.acquireSpectrumBtn.disabled = !connected;
+    elements.acquireImageBtn.disabled = !connected;
     elements.autoScaleBtn.disabled = !connected;
     elements.fullRangeBtn.disabled = !connected;
-    elements.setRangeBtn.disabled = !connected;
-    elements.yMin.disabled = !connected;
-    elements.yMax.disabled = !connected;
     
     // Keep these disabled unless we have spectrum data
     const hasSpectrum = appState.wavelengths && appState.currentSpectrum;
@@ -592,6 +550,85 @@ function logMessage(message, type = 'info') {
     logEntry.textContent = `[${timestamp}] ${message}`;
     elements.logContainer.appendChild(logEntry);
     elements.logContainer.scrollTop = elements.logContainer.scrollHeight;
+}
+
+// Acquire camera image
+async function acquireImage() {
+    try {
+        // Show loading indicator
+        const imageContainer = elements.cameraImage.parentElement;
+        imageContainer.classList.add('loading');
+        elements.cameraImage.style.display = 'none';
+        elements.acquireImageBtn.disabled = true;
+        
+        // Check if we have cached image data from spectrum acquisition
+        if (appState.imageData) {
+            logMessage('Using cached image data from spectrum acquisition', 'info');
+            
+            // Set image from cached data
+            elements.cameraImage.onload = function() {
+                // Remove loading indicator and show image
+                imageContainer.classList.remove('loading');
+                elements.cameraImage.style.display = 'block';
+                
+                // Re-enable the button once image is loaded
+                elements.acquireImageBtn.disabled = false;
+                logMessage('Camera image displayed from cache', 'success');
+            };
+            
+            elements.cameraImage.src = appState.imageData;
+            return;
+        }
+        
+        // If no cached data, acquire a new image
+        logMessage('No cached image data, acquiring new camera image...', 'info');
+        
+        // Call the API with a query parameter to request a scaled image directly from the server
+        const response = await fetch(`${API_BASE_URL}/acquire/image?scale=0.5`, {
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            cache: 'no-store' // Tell browser not to cache
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server responded with status: ${response.status}`);
+        }
+        
+        // Get the image as a blob
+        const imageBlob = await response.blob();
+        
+        // Create an object URL for the blob
+        const imageUrl = URL.createObjectURL(imageBlob);
+        
+        // Set image directly without additional processing
+        elements.cameraImage.onload = function() {
+            // Remove loading indicator and show image
+            imageContainer.classList.remove('loading');
+            elements.cameraImage.style.display = 'block';
+            
+            // Re-enable the button once image is loaded
+            elements.acquireImageBtn.disabled = false;
+            logMessage('Camera image acquired successfully', 'success');
+        };
+        
+        elements.cameraImage.src = imageUrl;
+    } catch (error) {
+        // Show error status
+        const imageContainer = elements.cameraImage.parentElement;
+        imageContainer.classList.remove('loading');
+        imageContainer.classList.add('error');
+        
+        // Re-enable the button on error
+        elements.acquireImageBtn.disabled = false;
+        logMessage(`Error acquiring image: ${error.message}`, 'error');
+        
+        // Remove error class after 3 seconds
+        setTimeout(() => {
+            imageContainer.classList.remove('error');
+        }, 3000);
+    }
 }
 
 // Clear log
