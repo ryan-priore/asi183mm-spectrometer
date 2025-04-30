@@ -184,7 +184,7 @@ def test_direct_zwoasi(sdk_path: str, save_dir: Path, exposure_ms: int, gain: in
         logger.info("Capturing raw image using capture method...")
         try:
             raw_data = camera.capture()
-            
+    
             # Convert to numpy array with correct dimensions
             width = info['MaxWidth']
             height = info['MaxHeight']
@@ -325,7 +325,7 @@ def test_camera_module(sdk_path: str, save_dir: Path, exposure_ms: int, gain: in
             save_dir / 'module_test_image.png',
             title=f"ASI183Camera Module Test (Exp: {exposure_ms}ms, Gain: {gain})"
         )
-        
+            
         # Test ROI
         logger.info("Testing ROI...")
         center_y = camera_info['max_height'] // 2

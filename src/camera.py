@@ -34,7 +34,7 @@ class ASI183Camera:
             asi.init(env_path)
         else:
             raise ValueError("SDK path not provided and ZWO_ASI_LIB environment variable not set")
-        
+            
         # Add a short delay after initialization to let the driver stabilize
         time.sleep(1)
             
@@ -64,12 +64,8 @@ class ASI183Camera:
                 
             # Use the same approach that works in test_asi.py
             logger.debug(f"Opening camera {camera_id}")
-            try:
-                self.camera = asi.Camera(camera_id)
-                logger.debug(f"Successfully created camera object for ID {camera_id}")
-            except Exception as e:
-                logger.error(f"Failed to create camera object: {e}")
-                return False
+            self.camera = asi.Camera(camera_id)
+            logger.debug(f"Successfully created camera object for ID {camera_id}")
             
             # Add delay after creating camera object
             logger.debug("Waiting after camera creation...")
@@ -77,12 +73,8 @@ class ASI183Camera:
             
             # Get camera info
             logger.debug("Getting camera properties")
-            try:
-                self.camera_info = self.camera.get_camera_property()
-                logger.debug(f"Camera properties: {self.camera_info['Name']}, {self.camera_info['MaxWidth']}x{self.camera_info['MaxHeight']}")
-            except Exception as e:
-                logger.error(f"Failed to get camera properties: {e}")
-                return False
+            self.camera_info = self.camera.get_camera_property()
+            logger.debug(f"Camera properties: {self.camera_info['Name']}, {self.camera_info['MaxWidth']}x{self.camera_info['MaxHeight']}")
             
             # Additional delay
             logger.debug("Waiting after getting properties...")
@@ -90,13 +82,7 @@ class ASI183Camera:
             
             # Set some default settings appropriate for spectroscopy
             logger.debug("Setting up default parameters")
-            try:
-                self.setup_defaults()
-                logger.debug("Default parameters set successfully")
-            except Exception as e:
-                logger.error(f"Failed to set default parameters: {e}")
-                # Continue anyway - some cameras might work without setting defaults
-                pass
+            self.setup_defaults()
             
             self.connected = True
             logger.info(f"Connected to {self.camera_info['Name']}")
@@ -125,12 +111,12 @@ class ASI183Camera:
                 controls['BandWidth']['MinValue']
             )
             logger.debug("Bandwidth set successfully")
-            
+        
             # Set for monochrome imaging
             logger.debug("Setting image type to RAW16")
             self.camera.set_image_type(asi.ASI_IMG_RAW16)  # 16-bit for better dynamic range
             logger.debug("Image type set successfully")
-            
+        
             # Default settings - these should be configurable via the API
             logger.debug("Setting basic camera parameters")
             
@@ -164,7 +150,7 @@ class ASI183Camera:
                 logger.debug("Flip set successfully")
             except Exception as e:
                 logger.warning(f"Failed to set flip: {e}")
-            
+        
             # Disable auto settings
             try:
                 logger.debug("Disabling dark subtract")
@@ -229,7 +215,7 @@ class ASI183Camera:
         """
         if not self.connected or not self.camera:
             raise RuntimeError("Camera not connected")
-        
+            
         # ASI cameras need exposure in microseconds    
         exposure_us = exposure_ms * 1000
         logger.debug(f"Setting exposure to {exposure_ms}ms ({exposure_us}μs)")
@@ -369,7 +355,7 @@ class ASI183Camera:
                             width = roi[2]
                             height = roi[3]
                             logger.debug(f"Using ROI dimensions: {width}x{height}")
-                        except:
+                        except Exception as e:
                             logger.debug(f"Using default dimensions: {width}x{height}")
                     
                     # Convert bytes to numpy array

@@ -54,10 +54,6 @@ const elements = {
     // Spectrum display
     spectrumPlot: document.getElementById('spectrum-plot'),
     
-    // Plot controls
-    autoScaleBtn: document.getElementById('auto-scale-btn'),
-    fullRangeBtn: document.getElementById('full-range-btn'),
-    
     // Data export
     saveSpectrumBtn: document.getElementById('save-spectrum-btn'),
     copyDataBtn: document.getElementById('copy-data-btn'),
@@ -68,7 +64,12 @@ const elements = {
     
     // Log
     logContainer: document.getElementById('log-container'),
-    clearLogBtn: document.getElementById('clear-log-btn')
+    clearLogBtn: document.getElementById('clear-log-btn'),
+    
+    // Processing settings
+    setProcessingBtn: document.getElementById('set-processing-btn'),
+    subtractDark: document.getElementById('subtract-dark'),
+    useMax: document.getElementById('use-max')
 };
 
 // Initialize the application
@@ -83,11 +84,15 @@ function initApp() {
     elements.acquireDarkBtn.addEventListener('click', acquireDark);
     elements.acquireSpectrumBtn.addEventListener('click', acquireSpectrum);
     elements.acquireImageBtn.addEventListener('click', acquireImage);
-    elements.autoScaleBtn.addEventListener('click', autoScalePlot);
-    elements.fullRangeBtn.addEventListener('click', setFullRange);
     elements.saveSpectrumBtn.addEventListener('click', saveSpectrum);
     elements.copyDataBtn.addEventListener('click', copyData);
     elements.clearLogBtn.addEventListener('click', clearLog);
+    
+    // Set up processing settings
+    elements.setProcessingBtn.addEventListener('click', setProcessingSettings);
+    
+    // Initialize tab interface
+    initTabInterface();
     
     // Set default values
     elements.exposureTime.value = 100;
@@ -122,6 +127,50 @@ function initApp() {
     // Log initialization
     logMessage('Interface initialized', 'info');
     logMessage('Connect to the spectrometer to begin', 'info');
+}
+
+// Initialize tab interface
+function initTabInterface() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            // Remove active class from all buttons and panes
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab-pane').forEach(pane => {
+                pane.classList.remove('active');
+            });
+            
+            // Add active class to clicked button
+            button.classList.add('active');
+            
+            // Activate corresponding tab pane
+            const tabId = button.getAttribute('data-tab');
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+        });
+    });
+}
+
+// Set processing settings
+async function setProcessingSettings() {
+    const subtractDark = elements.subtractDark.checked;
+    const useMax = elements.useMax.checked;
+    
+    try {
+        logMessage(`Setting processing options: Subtract Dark=${subtractDark}, Use Max=${useMax}`, 'info');
+        
+        await apiRequest('/processing', 'POST', { 
+            subtract_dark: subtractDark,
+            use_max: useMax
+        });
+        
+        logMessage('Processing settings updated successfully', 'success');
+    } catch (error) {
+        logMessage(`Error setting processing options: ${error.message}`, 'error');
+    }
 }
 
 // API Requests
@@ -171,6 +220,12 @@ async function connectSpectrometer() {
         
         // Enable controls
         toggleUIElements(true);
+        
+        // Activate the Camera tab by default
+        const cameraTabBtn = document.querySelector('.tab-btn[data-tab="camera"]');
+        if (cameraTabBtn) {
+            cameraTabBtn.click();
+        }
         
         logMessage('Connected to spectrometer', 'success');
         
@@ -273,6 +328,13 @@ async function getSpectrumeterSettings() {
                 elements.wavelengthC.value = coeffs.length > 2 ? coeffs[2] : 0.0;
                 logMessage(`Current calibration: A=${elements.wavelengthA.value}, B=${elements.wavelengthB.value}, C=${elements.wavelengthC.value}`, 'info');
             }
+            
+            if (statusData.processing) {
+                // Update processing settings
+                elements.subtractDark.checked = statusData.processing.subtract_dark || false;
+                elements.useMax.checked = statusData.processing.use_max || false;
+                logMessage(`Processing settings: Subtract Dark=${statusData.processing.subtract_dark}, Use Max=${statusData.processing.use_max}`, 'info');
+            }
         }
     } catch (error) {
         logMessage(`Error getting settings: ${error.message}`, 'error');
@@ -374,10 +436,13 @@ async function acquireSpectrum() {
         appState.wavelengths = spectrumData.wavelengths;
         appState.currentSpectrum = spectrumData.intensities;
         
-        // Store the image data if available
+        // Store and display the image data if available
         if (spectrumData.image_data) {
             appState.imageData = spectrumData.image_data;
-            logMessage('Image data cached from spectrum acquisition', 'info');
+            logMessage('Image data received from spectrum acquisition', 'info');
+            
+            // Display the image automatically
+            displayCachedImage();
         }
         
         // Draw spectrum
@@ -391,6 +456,28 @@ async function acquireSpectrum() {
     } catch (error) {
         logMessage(`Error acquiring spectrum: ${error.message}`, 'error');
     }
+}
+
+// Function to display cached image data
+function displayCachedImage() {
+    if (!appState.imageData) {
+        return;
+    }
+    
+    const imageContainer = elements.cameraImage.parentElement;
+    
+    // Set image from cached data
+    elements.cameraImage.onload = function() {
+        // Remove loading indicator and show image
+        imageContainer.classList.remove('loading');
+        elements.cameraImage.style.display = 'block';
+        logMessage('Camera image displayed', 'info');
+    };
+    
+    // Show loading indicator while image loads
+    imageContainer.classList.add('loading');
+    elements.cameraImage.style.display = 'none';
+    elements.cameraImage.src = appState.imageData;
 }
 
 // Draw spectrum using Plotly.js
@@ -417,43 +504,6 @@ function drawSpectrum(wavelengths, intensities) {
         modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
         displaylogo: false
     });
-}
-
-// Auto-scale the y-axis
-function autoScalePlot() {
-    if (!appState.wavelengths || !appState.currentSpectrum) {
-        logMessage('No spectrum data to auto-scale', 'warning');
-        return;
-    }
-    
-    Plotly.relayout('spectrum-plot', {
-        'yaxis.autorange': true
-    });
-    
-    // Update the stored layout
-    appState.plotLayout.yaxis.autorange = true;
-    delete appState.plotLayout.yaxis.range;
-    
-    logMessage('Y-axis auto-scaled to data range', 'info');
-}
-
-// Set full 16-bit range
-function setFullRange() {
-    if (!appState.wavelengths || !appState.currentSpectrum) {
-        logMessage('No spectrum data to set range for', 'warning');
-        return;
-    }
-    
-    Plotly.relayout('spectrum-plot', {
-        'yaxis.autorange': false,
-        'yaxis.range': [0, 65535]
-    });
-    
-    // Update the stored layout
-    appState.plotLayout.yaxis.autorange = false;
-    appState.plotLayout.yaxis.range = [0, 65535];
-    
-    logMessage('Y-axis set to full 16-bit range (0-65535)', 'info');
 }
 
 // Save spectrum data
@@ -521,25 +571,31 @@ function copyData() {
 
 // Toggle UI elements based on connection state
 function toggleUIElements(connected) {
+    // Helper function to safely toggle disabled state
+    const safeToggle = (element, isDisabled) => {
+        if (element) {
+            element.disabled = isDisabled;
+        }
+    };
+    
     // Disable/enable connection buttons
-    elements.connectBtn.disabled = connected;
-    elements.disconnectBtn.disabled = !connected;
+    safeToggle(elements.connectBtn, connected);
+    safeToggle(elements.disconnectBtn, !connected);
     
     // Disable/enable all other buttons
-    elements.setExposureBtn.disabled = !connected;
-    elements.setGainBtn.disabled = !connected;
-    elements.setRoiBtn.disabled = !connected;
-    elements.setCalibrationBtn.disabled = !connected;
-    elements.acquireDarkBtn.disabled = !connected;
-    elements.acquireSpectrumBtn.disabled = !connected;
-    elements.acquireImageBtn.disabled = !connected;
-    elements.autoScaleBtn.disabled = !connected;
-    elements.fullRangeBtn.disabled = !connected;
+    safeToggle(elements.setExposureBtn, !connected);
+    safeToggle(elements.setGainBtn, !connected);
+    safeToggle(elements.setRoiBtn, !connected);
+    safeToggle(elements.setCalibrationBtn, !connected);
+    safeToggle(elements.setProcessingBtn, !connected);
+    safeToggle(elements.acquireDarkBtn, !connected);
+    safeToggle(elements.acquireSpectrumBtn, !connected);
+    safeToggle(elements.acquireImageBtn, !connected);
     
     // Keep these disabled unless we have spectrum data
     const hasSpectrum = appState.wavelengths && appState.currentSpectrum;
-    elements.saveSpectrumBtn.disabled = !connected || !hasSpectrum;
-    elements.copyDataBtn.disabled = !connected || !hasSpectrum;
+    safeToggle(elements.saveSpectrumBtn, !connected || !hasSpectrum);
+    safeToggle(elements.copyDataBtn, !connected || !hasSpectrum);
 }
 
 // Add message to log
@@ -555,33 +611,25 @@ function logMessage(message, type = 'info') {
 // Acquire camera image
 async function acquireImage() {
     try {
-        // Show loading indicator
-        const imageContainer = elements.cameraImage.parentElement;
-        imageContainer.classList.add('loading');
-        elements.cameraImage.style.display = 'none';
-        elements.acquireImageBtn.disabled = true;
-        
         // Check if we have cached image data from spectrum acquisition
         if (appState.imageData) {
-            logMessage('Using cached image data from spectrum acquisition', 'info');
-            
-            // Set image from cached data
-            elements.cameraImage.onload = function() {
-                // Remove loading indicator and show image
-                imageContainer.classList.remove('loading');
-                elements.cameraImage.style.display = 'block';
-                
-                // Re-enable the button once image is loaded
-                elements.acquireImageBtn.disabled = false;
-                logMessage('Camera image displayed from cache', 'success');
-            };
-            
-            elements.cameraImage.src = appState.imageData;
+            logMessage('Using cached image data from previous acquisition', 'info');
+            displayCachedImage();
+            // Re-enable the button (displayCachedImage doesn't handle this)
+            elements.acquireImageBtn.disabled = false;
             return;
         }
         
         // If no cached data, acquire a new image
         logMessage('No cached image data, acquiring new camera image...', 'info');
+        
+        // Disable the button while acquiring
+        elements.acquireImageBtn.disabled = true;
+        
+        // Show loading indicator
+        const imageContainer = elements.cameraImage.parentElement;
+        imageContainer.classList.add('loading');
+        elements.cameraImage.style.display = 'none';
         
         // Call the API with a query parameter to request a scaled image directly from the server
         const response = await fetch(`${API_BASE_URL}/acquire/image?scale=0.5`, {
@@ -637,5 +685,21 @@ function clearLog() {
     logMessage('Log cleared', 'info');
 }
 
+// Helper function to check which elements are null
+function checkElements() {
+    console.log("Checking DOM elements:");
+    for (const [key, value] of Object.entries(elements)) {
+        if (!value) {
+            console.error(`Missing DOM element: ${key}`);
+        }
+    }
+}
+
 // Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', initApp); 
+document.addEventListener('DOMContentLoaded', () => {
+    // Check which elements are null before initializing
+    checkElements();
+    
+    // Initialize the application
+    initApp();
+}); 

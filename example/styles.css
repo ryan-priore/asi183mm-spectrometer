@@ -75,8 +75,8 @@ header h1 {
 }
 
 .main-content {
-    display: grid;
-    grid-template-columns: 300px 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 20px;
 }
 
@@ -86,6 +86,12 @@ header h1 {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     padding: 20px;
     margin-bottom: 20px;
+    width: 100%;
+}
+
+/* Adjust acquisition panels to be wider */
+.acquisition-panel {
+    min-height: 400px;
 }
 
 h2 {
@@ -102,14 +108,29 @@ h3 {
     color: var(--primary-color);
 }
 
-.settings-group {
+.settings-content {
+    padding: 15px 0;
+}
+
+.settings-tabs {
+    display: flex;
+    justify-content: center;
+    border-bottom: 1px solid var(--border-color);
     margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+/* Make the settings section look better in the new layout */
+.settings-group {
+    max-width: 800px;
+    margin: 0 auto;
 }
 
 .form-group {
-    margin-bottom: 10px;
     display: flex;
     align-items: center;
+    justify-content: center;
+    margin-bottom: 15px;
 }
 
 label {
@@ -168,14 +189,14 @@ button:disabled {
 
 .acquisition-buttons {
     display: flex;
-    flex-wrap: wrap;
+    justify-content: center;
     gap: 10px;
     margin-bottom: 15px;
 }
 
 .spectrum-container {
     width: 100%;
-    height: 300px;
+    height: 400px;
     background-color: #f8f9fa;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -189,12 +210,10 @@ button:disabled {
     height: 100%;
 }
 
-.plot-controls {
+.plot-controls, .data-export {
     display: flex;
-    flex-wrap: wrap;
+    justify-content: center;
     gap: 10px;
-    align-items: center;
-    margin-bottom: 15px;
 }
 
 .plot-controls input {
@@ -209,14 +228,9 @@ button:disabled {
     cursor: not-allowed;
 }
 
-.data-export {
-    display: flex;
-    gap: 10px;
-}
-
 .image-container {
     width: 100%;
-    height: 300px;
+    height: 400px;
     background-color: #f8f9fa;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -262,7 +276,7 @@ button:disabled {
 }
 
 .log-panel {
-    grid-column: 1 / span 2;
+    width: 100%;
 }
 
 #log-container {
@@ -302,11 +316,13 @@ button:disabled {
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .main-content {
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
     }
     
     .settings-panel, .acquisition-panel, .log-panel {
-        grid-column: 1;
+        padding: 15px;
     }
     
     header {
@@ -318,7 +334,124 @@ button:disabled {
         margin-top: 10px;
     }
     
-    .spectrum-container {
+    .spectrum-container, .image-container {
         height: 250px;
     }
+    
+    .settings-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+    
+    .form-group {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    label {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
+    .secondary-btn {
+        margin-left: 0;
+        margin-top: 5px;
+    }
+}
+
+/* Tabbed interface styles */
+.settings-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 20px;
+    overflow-x: auto;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 10px 15px;
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-right: 5px;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: var(--secondary-color);
+}
+
+.tab-btn.active {
+    color: var(--secondary-color);
+    border-bottom: 2px solid var(--secondary-color);
+}
+
+.tab-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Tooltip styles */
+.tooltip {
+    position: relative;
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-color: var(--border-color);
+    color: var(--panel-color);
+    border-radius: 50%;
+    text-align: center;
+    line-height: 16px;
+    font-size: 12px;
+    margin-left: 5px;
+    cursor: help;
+}
+
+.tooltip:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 50%;
+    top: -30px;
+    transform: translateX(-50%);
+    background-color: var(--primary-color);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.tooltip:hover::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -10px;
+    transform: translateX(-50%);
+    border-width: 5px;
+    border-style: solid;
+    border-color: var(--primary-color) transparent transparent transparent;
+    z-index: 10;
+}
+
+/* Checkbox styles */
+input[type="checkbox"] {
+    width: auto;
+    margin-right: 10px;
 } 

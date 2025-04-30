@@ -83,7 +83,7 @@ if [ $DEBUG -eq 1 ]; then
     python src/main.py --host "$HOST" --port "$PORT" --debug 2>&1 | tee "$LOG_FILE"
 else
     python src/main.py --host "$HOST" --port "$PORT" 2>&1 | tee "$LOG_FILE"
-fi
+fi 
 
 # Deactivate the virtual environment when done
 deactivate 

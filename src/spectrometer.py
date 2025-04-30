@@ -203,7 +203,7 @@ class Spectrometer:
         else:
             # Get mean value of each column (default)
             spectrum = np.mean(raw_image, axis=0)
-            
+        
         # Create wavelength mapping just once (more efficient than per-pixel conversion)
         pixel_positions = np.arange(len(spectrum))
         wavelengths = self.pixel_to_wavelength(pixel_positions)
