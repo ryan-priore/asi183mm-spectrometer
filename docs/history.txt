@@ -425,4 +425,36 @@ Date: 2025-05-01 19:15:00
    - Eliminated image-related event listeners and functions
    - Simplified DOM structure for better maintenance
    - Restored original control flow without image refreshes
-   - Maintained clean separation between UI and data processing 
+   - Maintained clean separation between UI and data processing
+
+INTERACTIVE VISUALIZATION ENHANCEMENT
+----------------------------------
+Date: 2025-05-01 21:30:00
+
+1. Implemented Plotly.js interactive spectrum visualization:
+   - Replaced basic canvas plotting with powerful Plotly.js library
+   - Added interactive zooming and panning capabilities
+   - Enabled hover tooltips showing precise spectrum values
+   - Implemented responsive plot that adapts to container size
+   - Added high-quality vector-based rendering
+
+2. Enhanced y-axis control:
+   - Added interface for fixed y-axis range control
+   - Implemented "Auto Scale" button for automatic scaling
+   - Added manual range input for precise y-axis limits
+   - Created persistent plot layout state management
+   - Ensured state synchronization between UI and plot
+
+3. Improved data visualization:
+   - Enhanced spectrum display with better labeling and gridlines
+   - Added hover information for data inspection
+   - Implemented proper axis titles and formatting
+   - Created configurable modebar with essential tools
+   - Improved visual styling for better readability
+
+4. Technical improvements:
+   - Eliminated manual canvas rendering code
+   - Added memory-efficient plot updates with Plotly.react
+   - Removed manual window resize handling
+   - Integrated with existing spectrum calculation
+   - Preserved spectrum statistics display for continuity 

@@ -229,9 +229,33 @@ class ASI183Camera:
         """
         if not self.connected or not self.camera:
             raise RuntimeError("Camera not connected")
+        
+        # ASI cameras need exposure in microseconds    
+        exposure_us = exposure_ms * 1000
+        logger.debug(f"Setting exposure to {exposure_ms}ms ({exposure_us}μs)")
+        
+        # Get current exposure to compare
+        try:
+            current_exposure = self.camera.get_control_value(asi.ASI_EXPOSURE)[0]
+            logger.debug(f"Current exposure before setting: {current_exposure/1000:.2f}ms")
+        except Exception as e:
+            logger.warning(f"Failed to get current exposure: {e}")
             
-        self.camera.set_control_value(asi.ASI_EXPOSURE, exposure_ms)
-        logger.debug(f"Set exposure to {exposure_ms}ms")
+        # Set new exposure
+        try:
+            self.camera.set_control_value(asi.ASI_EXPOSURE, exposure_us)
+            logger.debug(f"Exposure set to {exposure_ms}ms ({exposure_us}μs)")
+            
+            # Verify if the exposure was set correctly
+            new_exposure = self.camera.get_control_value(asi.ASI_EXPOSURE)[0]
+            logger.debug(f"Current exposure after setting: {new_exposure/1000:.2f}ms")
+            
+            # Check if there's a significant difference
+            if abs(new_exposure - exposure_us) > 1000:  # Difference of more than 1ms
+                logger.warning(f"Exposure might not be set correctly: requested {exposure_us}μs, got {new_exposure}μs")
+        except Exception as e:
+            logger.error(f"Failed to set exposure: {e}")
+            raise
     
     def set_gain(self, gain: int) -> None:
         """
@@ -288,18 +312,9 @@ class ASI183Camera:
             raise RuntimeError("Camera not initialized")
             
         logger.debug("Beginning image capture process")
-            
-        # Stop any ongoing video capture
-        try:
-            logger.debug("Stopping any existing video capture")
-            self.camera.stop_video_capture()
-            logger.debug("Video capture stopped")
-        except Exception as e:
-            logger.debug(f"No video capture was running: {e}")
         
         try:
             # Get current exposure
-            logger.debug("Getting current exposure value")
             try:
                 exposure = self.camera.get_control_value(asi.ASI_EXPOSURE)[0]
                 logger.debug(f"Current exposure: {exposure/1000:.2f}ms")
@@ -308,29 +323,35 @@ class ASI183Camera:
                 exposure = 100000  # Default to 100ms if can't get current value
                 logger.debug(f"Using default exposure: {exposure/1000:.2f}ms")
             
-            # Start exposure explicitly instead of using single capture to be more reliable
-            logger.debug(f"Starting exposure with {exposure/1000:.2f}ms")
-            self.camera.start_exposure()
-            
-            # Calculate wait time with buffer
-            wait_time = (exposure / 1000.0) + 0.5  # Convert μs to s and add buffer
-            logger.debug(f"Waiting {wait_time:.2f}s for exposure to complete")
-            time.sleep(wait_time)
-            
-            # Check status
-            logger.debug("Checking exposure status")
-            status = self.camera.get_exposure_status()
-            logger.debug(f"Exposure status: {status}")
-            
-            if status != asi.ASI_EXP_SUCCESS:
-                logger.warning(f"Exposure not complete (status: {status}), waiting longer")
-                time.sleep(1.0)  # Wait a bit longer
+            # Use capture method directly instead of start_exposure + get_data_after_exposure
+            # This is more efficient as it handles timing internally in the SDK
+            logger.debug(f"Capturing image with {exposure/1000:.2f}ms exposure")
+            try:
+                # Try to use the more efficient capture method
+                data = self.camera.capture()
+                logger.debug("Image captured using direct capture method")
+            except Exception as e:
+                logger.warning(f"Direct capture failed, using exposure sequence: {e}")
+                # Fall back to manual exposure sequence
+                self.camera.start_exposure()
+                
+                # Calculate wait time with a smaller buffer
+                wait_time = (exposure / 1000.0) + 0.1  # Convert μs to s and add smaller buffer
+                logger.debug(f"Waiting {wait_time:.2f}s for exposure to complete")
+                time.sleep(wait_time)
+                
+                # Check status
                 status = self.camera.get_exposure_status()
-                logger.debug(f"Exposure status after additional wait: {status}")
-            
-            # Get data
-            logger.debug("Retrieving image data")
-            data = self.camera.get_data_after_exposure()
+                logger.debug(f"Exposure status: {status}")
+                
+                if status != asi.ASI_EXP_SUCCESS:
+                    logger.warning(f"Exposure not complete (status: {status}), waiting a bit longer")
+                    time.sleep(0.3)  # Wait a bit longer, but not too long
+                    status = self.camera.get_exposure_status()
+                    logger.debug(f"Exposure status after additional wait: {status}")
+                
+                # Get data
+                data = self.camera.get_data_after_exposure()
             
             # Convert data to numpy array with proper dimensions
             if isinstance(data, (bytes, bytearray)):
@@ -353,7 +374,9 @@ class ASI183Camera:
                     
                     # Convert bytes to numpy array
                     logger.debug("Converting to numpy array")
-                    return np.frombuffer(data, dtype=np.uint16).reshape((height, width))
+                    array_data = np.frombuffer(data, dtype=np.uint16).reshape((height, width))
+                    
+                    return array_data
                 else:
                     logger.warning("Camera info not available, returning raw data")
                     return data

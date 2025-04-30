@@ -72,8 +72,6 @@ class WavelengthCalibration(BaseModel):
 class ProcessingSettings(BaseModel):
     """Spectrum processing settings"""
     subtract_dark: Optional[bool] = Field(None, description="Whether to subtract dark frame")
-    smoothing: Optional[bool] = Field(None, description="Whether to apply smoothing")
-    smoothing_window: Optional[int] = Field(None, description="Size of smoothing window")
 
 class SpectrumResponse(BaseModel):
     """Response model for spectrum data"""
@@ -119,8 +117,7 @@ async def get_status(spectrometer: Spectrometer = Depends(get_spectrometer)):
             "coefficients": spectrometer._wavelength_coeffs
         },
         "processing": {
-            "subtract_dark": spectrometer.subtract_dark,
-            "smoothing_window": spectrometer.smoothing_window
+            "subtract_dark": spectrometer.subtract_dark
         }
     }
 
@@ -206,14 +203,11 @@ async def set_processing(
     try:
         if settings.subtract_dark is not None:
             spectrometer.subtract_dark = settings.subtract_dark
-        if settings.smoothing_window is not None:
-            spectrometer.smoothing_window = settings.smoothing_window
             
         return {
             "message": "Processing settings updated",
             "settings": {
-                "subtract_dark": spectrometer.subtract_dark,
-                "smoothing_window": spectrometer.smoothing_window
+                "subtract_dark": spectrometer.subtract_dark
             }
         }
     except Exception as e:
@@ -231,7 +225,6 @@ async def acquire_dark(spectrometer: Spectrometer = Depends(get_spectrometer)):
 @app.get("/acquire/spectrum", tags=["Acquisition"], response_model=SpectrumResponse)
 async def acquire_spectrum(
     subtract_dark: Optional[bool] = Query(None, description="Whether to subtract dark frame"),
-    smoothing: Optional[bool] = Query(True, description="Whether to apply smoothing"),
     spectrometer: Spectrometer = Depends(get_spectrometer)
 ):
     """Acquire a spectrum"""
@@ -241,8 +234,7 @@ async def acquire_spectrum(
         
         # Acquire the spectrum
         wavelengths, intensities = spectrometer.acquire_spectrum(
-            subtract_dark=subtract_dark,
-            smoothing=smoothing
+            subtract_dark=subtract_dark
         )
         
         # Convert to lists for JSON serialization

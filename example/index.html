@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASI183MM Spectrometer Control</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -101,12 +102,21 @@
                 </div>
                 
                 <div class="spectrum-container">
-                    <canvas id="spectrum-canvas"></canvas>
+                    <div id="spectrum-plot" style="width:100%; height:100%;"></div>
                     <div class="spectrum-info">
                         <div>Min: <span id="min-value">0</span></div>
                         <div>Max: <span id="max-value">0</span></div>
                         <div>Avg: <span id="avg-value">0</span></div>
                     </div>
+                </div>
+                
+                <div class="plot-controls">
+                    <button id="auto-scale-btn" class="secondary-btn">Auto Scale</button>
+                    <button id="full-range-btn" class="secondary-btn">Full 16-bit Range</button>
+                    <span>Y Range:</span>
+                    <input type="number" id="y-min" placeholder="Min">
+                    <input type="number" id="y-max" placeholder="Max">
+                    <button id="set-range-btn" class="secondary-btn">Set Range</button>
                 </div>
                 
                 <div class="data-export">

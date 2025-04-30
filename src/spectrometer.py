@@ -49,7 +49,6 @@ class Spectrometer:
         self.dark_frame = None
         
         # Processing settings
-        self.smoothing_window = 5  # For savgol filter
         self.subtract_dark = False
     
     def connect(self) -> bool:
@@ -156,7 +155,7 @@ class Spectrometer:
     
     def acquire_spectrum(self, 
                          subtract_dark: Optional[bool] = None,
-                         smoothing: Optional[bool] = True,
+                         smoothing: Optional[bool] = False,  # Set default to False
                          return_raw: bool = False
                         ) -> Union[Tuple[np.ndarray, np.ndarray], np.ndarray]:
         """
@@ -164,7 +163,7 @@ class Spectrometer:
         
         Args:
             subtract_dark: Whether to subtract dark frame (None uses default setting)
-            smoothing: Whether to apply smoothing
+            smoothing: No longer used, kept for backward compatibility
             return_raw: If True, returns the raw 2D image instead of processed spectrum
             
         Returns:
@@ -191,20 +190,10 @@ class Spectrometer:
             else:
                 logger.warning("Dark frame shape mismatch, skipping subtraction")
                 
-        # Calculate average along rows (vertical axis) to get the spectrum
-        # instead of summing to account for different ROI heights
-        if raw_image.shape[0] > 0:  # Ensure we don't divide by zero
-            spectrum = np.mean(raw_image, axis=0)
-        else:
-            spectrum = np.sum(raw_image, axis=0)  # Fallback to sum if height is zero
+        # Get maximum value of each column for full ADC range (optimized version)
+        spectrum = np.max(raw_image, axis=0)
             
-        # Apply smoothing if requested
-        if smoothing and self.smoothing_window > 0:
-            if self.smoothing_window % 2 == 0:
-                self.smoothing_window += 1  # Ensure odd window size
-            spectrum = signal.savgol_filter(spectrum, self.smoothing_window, 2)
-            
-        # Convert pixel positions to wavelengths using calibration
+        # Create wavelength mapping just once (more efficient than per-pixel conversion)
         pixel_positions = np.arange(len(spectrum))
         wavelengths = self.pixel_to_wavelength(pixel_positions)
         

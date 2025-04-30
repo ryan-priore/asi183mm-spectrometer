@@ -15,7 +15,8 @@ const appState = {
     connected: false,
     currentSpectrum: null,
     wavelengths: null,
-    darkFrame: null
+    darkFrame: null,
+    plotLayout: null
 };
 
 // DOM elements
@@ -50,10 +51,17 @@ const elements = {
     acquireSpectrumBtn: document.getElementById('acquire-spectrum-btn'),
     
     // Spectrum display
-    spectrumCanvas: document.getElementById('spectrum-canvas'),
+    spectrumPlot: document.getElementById('spectrum-plot'),
     minValue: document.getElementById('min-value'),
     maxValue: document.getElementById('max-value'),
     avgValue: document.getElementById('avg-value'),
+    
+    // Plot controls
+    autoScaleBtn: document.getElementById('auto-scale-btn'),
+    fullRangeBtn: document.getElementById('full-range-btn'),
+    setRangeBtn: document.getElementById('set-range-btn'),
+    yMin: document.getElementById('y-min'),
+    yMax: document.getElementById('y-max'),
     
     // Data export
     saveSpectrumBtn: document.getElementById('save-spectrum-btn'),
@@ -63,9 +71,6 @@ const elements = {
     logContainer: document.getElementById('log-container'),
     clearLogBtn: document.getElementById('clear-log-btn')
 };
-
-// Canvas context
-const ctx = elements.spectrumCanvas.getContext('2d');
 
 // Initialize the application
 function initApp() {
@@ -78,33 +83,46 @@ function initApp() {
     elements.setCalibrationBtn.addEventListener('click', setCalibration);
     elements.acquireDarkBtn.addEventListener('click', acquireDark);
     elements.acquireSpectrumBtn.addEventListener('click', acquireSpectrum);
+    elements.autoScaleBtn.addEventListener('click', autoScalePlot);
+    elements.fullRangeBtn.addEventListener('click', setFullRange);
+    elements.setRangeBtn.addEventListener('click', setYAxisRange);
     elements.saveSpectrumBtn.addEventListener('click', saveSpectrum);
     elements.copyDataBtn.addEventListener('click', copyData);
     elements.clearLogBtn.addEventListener('click', clearLog);
-    
-    // Set up canvas
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
     
     // Set default values
     elements.exposureTime.value = 100;
     elements.gain.value = 0;
     
+    // Initialize default Plotly layout
+    appState.plotLayout = {
+        title: 'Spectrum',
+        xaxis: {
+            title: 'Wavelength (nm)',
+            gridcolor: '#eee'
+        },
+        yaxis: {
+            title: 'Intensity (max ADC counts, 16-bit)',
+            gridcolor: '#eee',
+            range: [0, 65535]  // Set default range to the full 16-bit ADC range
+        },
+        margin: { t: 50, l: 60, r: 30, b: 60 },
+        plot_bgcolor: '#f8f9fa',
+        paper_bgcolor: '#f8f9fa',
+        hovermode: 'closest'
+    };
+    
+    // Initialize empty plot
+    Plotly.newPlot('spectrum-plot', [], appState.plotLayout, {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+        displaylogo: false
+    });
+    
     // Log initialization
     logMessage('Interface initialized', 'info');
     logMessage('Connect to the spectrometer to begin', 'info');
-}
-
-// Resize canvas to fit container
-function resizeCanvas() {
-    const container = elements.spectrumCanvas.parentElement;
-    elements.spectrumCanvas.width = container.clientWidth;
-    elements.spectrumCanvas.height = container.clientHeight;
-    
-    // Redraw if we have data
-    if (appState.currentSpectrum) {
-        drawSpectrum(appState.wavelengths, appState.currentSpectrum);
-    }
 }
 
 // API Requests
@@ -153,7 +171,7 @@ async function connectSpectrometer() {
         elements.connectionStatus.className = 'status connected';
         
         // Enable controls
-        toggleControlsEnabled(true);
+        toggleUIElements(true);
         
         logMessage('Connected to spectrometer', 'success');
         
@@ -200,7 +218,7 @@ async function disconnectSpectrometer() {
         elements.connectionStatus.className = 'status disconnected';
         
         // Disable controls
-        toggleControlsEnabled(false);
+        toggleUIElements(false);
         
         logMessage('Disconnected from spectrometer', 'success');
     } catch (error) {
@@ -359,7 +377,6 @@ async function acquireSpectrum() {
         
         // Draw spectrum
         drawSpectrum(appState.wavelengths, appState.currentSpectrum);
-        updateSpectrumStats(appState.currentSpectrum);
         
         // Enable export buttons
         elements.saveSpectrumBtn.disabled = false;
@@ -371,108 +388,96 @@ async function acquireSpectrum() {
     }
 }
 
-// Draw spectrum on canvas
+// Draw spectrum using Plotly.js
 function drawSpectrum(wavelengths, intensities) {
     if (!wavelengths || !intensities || wavelengths.length === 0) {
         return;
     }
     
-    const canvas = elements.spectrumCanvas;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
+    const trace = {
+        x: wavelengths,
+        y: intensities,
+        type: 'scatter',
+        mode: 'lines',
+        line: {
+            color: '#3498db',
+            width: 2
+        },
+        name: 'Spectrum'
+    };
     
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
+    Plotly.react('spectrum-plot', [trace], appState.plotLayout, {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+        displaylogo: false
+    });
     
-    // Calculate min/max values for scaling
-    const minIntensity = Math.min(...intensities);
-    const maxIntensity = Math.max(...intensities);
-    const range = maxIntensity - minIntensity;
-    
-    // Scale factor and padding
-    const xPadding = 40;
-    const yPadding = 30;
-    const graphWidth = width - 2 * xPadding;
-    const graphHeight = height - 2 * yPadding;
-    
-    // Draw axes
-    ctx.beginPath();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.moveTo(xPadding, yPadding);
-    ctx.lineTo(xPadding, height - yPadding);
-    ctx.lineTo(width - xPadding, height - yPadding);
-    ctx.stroke();
-    
-    // Draw wavelength scale
-    const minWavelength = Math.min(...wavelengths);
-    const maxWavelength = Math.max(...wavelengths);
-    const wavelengthRange = maxWavelength - minWavelength;
-    
-    // X-axis ticks and labels
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = '#333';
-    ctx.font = '10px Arial';
-    
-    for (let i = 0; i <= 5; i++) {
-        const x = xPadding + (i / 5) * graphWidth;
-        const wavelength = minWavelength + (i / 5) * wavelengthRange;
-        
-        ctx.beginPath();
-        ctx.moveTo(x, height - yPadding);
-        ctx.lineTo(x, height - yPadding + 5);
-        ctx.stroke();
-        
-        ctx.fillText(wavelength.toFixed(1), x, height - yPadding + 8);
+    // Update stats display
+    updateSpectrumStats(intensities);
+}
+
+// Auto-scale the y-axis
+function autoScalePlot() {
+    if (!appState.wavelengths || !appState.currentSpectrum) {
+        logMessage('No spectrum data to auto-scale', 'warning');
+        return;
     }
     
-    // Y-axis ticks and labels
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
+    Plotly.relayout('spectrum-plot', {
+        'yaxis.autorange': true
+    });
     
-    for (let i = 0; i <= 5; i++) {
-        const y = height - yPadding - (i / 5) * graphHeight;
-        const intensity = minIntensity + (i / 5) * range;
-        
-        ctx.beginPath();
-        ctx.moveTo(xPadding, y);
-        ctx.lineTo(xPadding - 5, y);
-        ctx.stroke();
-        
-        ctx.fillText(intensity.toFixed(0), xPadding - 8, y);
+    // Update the stored layout
+    appState.plotLayout.yaxis.autorange = true;
+    delete appState.plotLayout.yaxis.range;
+    
+    logMessage('Y-axis auto-scaled to data range', 'info');
+}
+
+// Set full 16-bit range
+function setFullRange() {
+    if (!appState.wavelengths || !appState.currentSpectrum) {
+        logMessage('No spectrum data to set range for', 'warning');
+        return;
     }
     
-    // Draw axis labels
-    ctx.textAlign = 'center';
-    ctx.font = '12px Arial';
-    ctx.fillText('Wavelength (nm)', width / 2, height - 10);
+    Plotly.relayout('spectrum-plot', {
+        'yaxis.autorange': false,
+        'yaxis.range': [0, 65535]
+    });
     
-    ctx.save();
-    ctx.translate(15, height / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillText('Intensity', 0, 0);
-    ctx.restore();
+    // Update the stored layout
+    appState.plotLayout.yaxis.autorange = false;
+    appState.plotLayout.yaxis.range = [0, 65535];
     
-    // Draw spectrum
-    ctx.beginPath();
-    ctx.strokeStyle = '#3498db';
-    ctx.lineWidth = 2;
-    
-    for (let i = 0; i < wavelengths.length; i++) {
-        const x = xPadding + ((wavelengths[i] - minWavelength) / wavelengthRange) * graphWidth;
-        const y = height - yPadding - ((intensities[i] - minIntensity) / range) * graphHeight;
-        
-        if (i === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
+    logMessage('Y-axis set to full 16-bit range (0-65535)', 'info');
+}
+
+// Set a fixed y-axis range
+function setYAxisRange() {
+    if (!appState.wavelengths || !appState.currentSpectrum) {
+        logMessage('No spectrum data to set range for', 'warning');
+        return;
     }
     
-    ctx.stroke();
+    const yMin = parseFloat(elements.yMin.value);
+    const yMax = parseFloat(elements.yMax.value);
+    
+    if (!isNaN(yMin) && !isNaN(yMax) && yMin < yMax) {
+        Plotly.relayout('spectrum-plot', {
+            'yaxis.autorange': false,
+            'yaxis.range': [yMin, yMax]
+        });
+        
+        // Update the stored layout
+        appState.plotLayout.yaxis.autorange = false;
+        appState.plotLayout.yaxis.range = [yMin, yMax];
+        
+        logMessage(`Y-axis range set to [${yMin}, ${yMax}]`, 'info');
+    } else {
+        logMessage('Invalid Y-axis range', 'error');
+    }
 }
 
 // Update spectrum statistics
@@ -554,16 +559,29 @@ function copyData() {
     }
 }
 
-// Toggle control elements enabled/disabled state
-function toggleControlsEnabled(enabled) {
-    elements.disconnectBtn.disabled = !enabled;
-    elements.setExposureBtn.disabled = !enabled;
-    elements.setGainBtn.disabled = !enabled;
-    elements.setRoiBtn.disabled = !enabled;
-    elements.setCalibrationBtn.disabled = !enabled;
-    elements.acquireDarkBtn.disabled = !enabled;
-    elements.acquireSpectrumBtn.disabled = !enabled;
-    elements.connectBtn.disabled = enabled;
+// Toggle UI elements based on connection state
+function toggleUIElements(connected) {
+    // Disable/enable connection buttons
+    elements.connectBtn.disabled = connected;
+    elements.disconnectBtn.disabled = !connected;
+    
+    // Disable/enable all other buttons
+    elements.setExposureBtn.disabled = !connected;
+    elements.setGainBtn.disabled = !connected;
+    elements.setRoiBtn.disabled = !connected;
+    elements.setCalibrationBtn.disabled = !connected;
+    elements.acquireDarkBtn.disabled = !connected;
+    elements.acquireSpectrumBtn.disabled = !connected;
+    elements.autoScaleBtn.disabled = !connected;
+    elements.fullRangeBtn.disabled = !connected;
+    elements.setRangeBtn.disabled = !connected;
+    elements.yMin.disabled = !connected;
+    elements.yMax.disabled = !connected;
+    
+    // Keep these disabled unless we have spectrum data
+    const hasSpectrum = appState.wavelengths && appState.currentSpectrum;
+    elements.saveSpectrumBtn.disabled = !connected || !hasSpectrum;
+    elements.copyDataBtn.disabled = !connected || !hasSpectrum;
 }
 
 // Add message to log
