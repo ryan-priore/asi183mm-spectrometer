@@ -72,6 +72,7 @@ class WavelengthCalibration(BaseModel):
 class ProcessingSettings(BaseModel):
     """Spectrum processing settings"""
     subtract_dark: Optional[bool] = Field(None, description="Whether to subtract dark frame")
+    use_max: Optional[bool] = Field(None, description="Whether to use maximum instead of mean for spectrum extraction")
 
 class SpectrumResponse(BaseModel):
     """Response model for spectrum data"""
@@ -118,7 +119,8 @@ async def get_status(spectrometer: Spectrometer = Depends(get_spectrometer)):
             "coefficients": spectrometer._wavelength_coeffs
         },
         "processing": {
-            "subtract_dark": spectrometer.subtract_dark
+            "subtract_dark": spectrometer.subtract_dark,
+            "use_max": spectrometer.use_max
         }
     }
 
@@ -205,10 +207,14 @@ async def set_processing(
         if settings.subtract_dark is not None:
             spectrometer.subtract_dark = settings.subtract_dark
             
+        if settings.use_max is not None:
+            spectrometer.use_max = settings.use_max
+            
         return {
             "message": "Processing settings updated",
             "settings": {
-                "subtract_dark": spectrometer.subtract_dark
+                "subtract_dark": spectrometer.subtract_dark,
+                "use_max": spectrometer.use_max
             }
         }
     except Exception as e:
@@ -226,6 +232,7 @@ async def acquire_dark(spectrometer: Spectrometer = Depends(get_spectrometer)):
 @app.get("/acquire/spectrum", tags=["Acquisition"], response_model=SpectrumResponse)
 async def acquire_spectrum(
     subtract_dark: Optional[bool] = Query(None, description="Whether to subtract dark frame"),
+    use_max: Optional[bool] = Query(None, description="Whether to use maximum instead of mean for spectrum extraction"),
     include_image: Optional[bool] = Query(True, description="Whether to include base64-encoded image data"),
     spectrometer: Spectrometer = Depends(get_spectrometer)
 ):
@@ -240,7 +247,8 @@ async def acquire_spectrum(
         # Process the spectrum using the raw image
         wavelengths, intensities = spectrometer.process_spectrum(
             raw_image,
-            subtract_dark=subtract_dark
+            subtract_dark=subtract_dark,
+            use_max=use_max
         )
         
         # Convert to lists for JSON serialization
@@ -339,6 +347,7 @@ async def get_roi(spectrometer: Spectrometer = Depends(get_spectrometer)):
 @app.post("/save/spectrum", tags=["Data"])
 async def save_spectrum_data(
     filename: str = Query(..., description="Filename for the spectrum data"),
+    use_max: Optional[bool] = Query(None, description="Whether to use maximum instead of mean for spectrum extraction"),
     spectrometer: Spectrometer = Depends(get_spectrometer)
 ):
     """Acquire and save a spectrum to a CSV file"""
@@ -351,7 +360,7 @@ async def save_spectrum_data(
         filepath = SPECTRA_DIR / clean_filename
         
         # Acquire spectrum
-        wavelengths, intensities = spectrometer.acquire_spectrum()
+        wavelengths, intensities = spectrometer.acquire_spectrum(use_max=use_max)
         
         # Save to file
         spectrometer.save_spectrum(str(filepath), wavelengths, intensities)

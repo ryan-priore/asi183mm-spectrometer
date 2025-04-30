@@ -5,7 +5,6 @@ Spectrometer module for processing camera data into spectra
 import os
 import logging
 import numpy as np
-import matplotlib.pyplot as plt
 from typing import Dict, Tuple, List, Optional, Any, Union
 from scipy import signal
 from scipy import interpolate
@@ -50,6 +49,7 @@ class Spectrometer:
         
         # Processing settings
         self.subtract_dark = False
+        self.use_max = False  # False = use mean (default), True = use max
     
     def connect(self) -> bool:
         """
@@ -156,7 +156,8 @@ class Spectrometer:
     def acquire_spectrum(self, 
                          subtract_dark: Optional[bool] = None,
                          smoothing: Optional[bool] = False,  # Set default to False
-                         return_raw: bool = False
+                         return_raw: bool = False,
+                         use_max: Optional[bool] = None
                         ) -> Union[Tuple[np.ndarray, np.ndarray], np.ndarray]:
         """
         Acquire a spectrum from the camera
@@ -165,6 +166,8 @@ class Spectrometer:
             subtract_dark: Whether to subtract dark frame (None uses default setting)
             smoothing: No longer used, kept for backward compatibility
             return_raw: If True, returns the raw 2D image instead of processed spectrum
+            use_max: Whether to use maximum instead of mean for spectrum extraction
+                    (None uses default setting)
             
         Returns:
             Tuple of (wavelengths, intensities) as NumPy arrays, or raw image if return_raw=True
@@ -175,6 +178,9 @@ class Spectrometer:
         # Use instance defaults if not specified
         if subtract_dark is None:
             subtract_dark = self.subtract_dark
+            
+        if use_max is None:
+            use_max = self.use_max
             
         # Acquire raw image
         raw_image = self.camera.capture_raw()
@@ -190,8 +196,13 @@ class Spectrometer:
             else:
                 logger.warning("Dark frame shape mismatch, skipping subtraction")
                 
-        # Get maximum value of each column for full ADC range (optimized version)
-        spectrum = np.max(raw_image, axis=0)
+        # Extract spectrum based on user preference
+        if use_max:
+            # Get maximum value of each column for full ADC range
+            spectrum = np.max(raw_image, axis=0)
+        else:
+            # Get mean value of each column (default)
+            spectrum = np.mean(raw_image, axis=0)
             
         # Create wavelength mapping just once (more efficient than per-pixel conversion)
         pixel_positions = np.arange(len(spectrum))
@@ -200,13 +211,16 @@ class Spectrometer:
         return wavelengths, spectrum
     
     def process_spectrum(self, raw_image: np.ndarray, 
-                       subtract_dark: Optional[bool] = None) -> Tuple[np.ndarray, np.ndarray]:
+                       subtract_dark: Optional[bool] = None,
+                       use_max: Optional[bool] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
         Process a raw image into a spectrum
         
         Args:
             raw_image: Raw 2D image data
             subtract_dark: Whether to subtract dark frame (None uses default setting)
+            use_max: Whether to use maximum instead of mean for spectrum extraction
+                    (None uses default setting)
             
         Returns:
             Tuple of (wavelengths, intensities) as NumPy arrays
@@ -218,6 +232,9 @@ class Spectrometer:
         if subtract_dark is None:
             subtract_dark = self.subtract_dark
             
+        if use_max is None:
+            use_max = self.use_max
+            
         # Apply dark frame correction if needed
         if subtract_dark and self.dark_frame is not None:
             if raw_image.shape == self.dark_frame.shape:
@@ -226,8 +243,13 @@ class Spectrometer:
             else:
                 logger.warning("Dark frame shape mismatch, skipping subtraction")
                 
-        # Get maximum value of each column for full ADC range (optimized version)
-        spectrum = np.max(raw_image, axis=0)
+        # Extract spectrum based on user preference
+        if use_max:
+            # Get maximum value of each column for full ADC range
+            spectrum = np.max(raw_image, axis=0)
+        else:
+            # Get mean value of each column (default)
+            spectrum = np.mean(raw_image, axis=0)
             
         # Create wavelength mapping just once (more efficient than per-pixel conversion)
         pixel_positions = np.arange(len(spectrum))
@@ -317,30 +339,23 @@ class Spectrometer:
                      ylabel: str = "Intensity (counts)",
                      output_file: Optional[str] = None) -> None:
         """
-        Plot spectrum data
+        Save spectrum data to file (plotting functionality removed)
         
         Args:
             wavelengths: Array of wavelengths
             intensities: Array of intensity values
-            title: Plot title
-            xlabel: X-axis label
-            ylabel: Y-axis label
-            output_file: If provided, save plot to this file
+            title: Title (not used, kept for compatibility)
+            xlabel: X-axis label (not used, kept for compatibility)
+            ylabel: Y-axis label (not used, kept for compatibility)
+            output_file: If provided, save data to this file
         """
-        plt.figure(figsize=(10, 6))
-        plt.plot(wavelengths, intensities)
-        plt.title(title)
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        plt.grid(True, alpha=0.3)
-        
         if output_file:
-            plt.savefig(output_file, dpi=300, bbox_inches='tight')
-            logger.info(f"Plot saved to {output_file}")
+            # Just save the data to CSV instead of plotting
+            csv_file = os.path.splitext(output_file)[0] + ".csv"
+            self.save_spectrum(csv_file, wavelengths, intensities)
+            logger.info(f"Spectrum data saved to {csv_file}")
         else:
-            plt.show()
-            
-        plt.close()
+            logger.info("No output file specified, spectrum not saved")
     
     def disconnect(self) -> None:
         """Disconnect from the camera"""
