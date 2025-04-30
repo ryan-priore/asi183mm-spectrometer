@@ -4,7 +4,8 @@
  */
 
 // Configuration
-const API_BASE_URL = 'http://localhost:8000';
+//const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = `http://${window.location.hostname}:8000`;
 const DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
@@ -15,9 +16,8 @@ const appState = {
     connected: false,
     currentSpectrum: null,
     wavelengths: null,
-    darkFrame: null,
     plotLayout: null,
-    imageData: null  // Add this to store the image data
+    imageData: null  // Store the image data
 };
 
 // DOM elements
@@ -26,6 +26,8 @@ const elements = {
     connectionStatus: document.getElementById('connection-status'),
     connectBtn: document.getElementById('connect-btn'),
     disconnectBtn: document.getElementById('disconnect-btn'),
+    themeToggleBtn: document.getElementById('theme-toggle-btn'),
+    themeIcon: document.getElementById('theme-icon'),
     
     // Camera settings
     exposureTime: document.getElementById('exposure-time'),
@@ -48,7 +50,6 @@ const elements = {
     setCalibrationBtn: document.getElementById('set-calibration-btn'),
     
     // Acquisition
-    acquireDarkBtn: document.getElementById('acquire-dark-btn'),
     acquireSpectrumBtn: document.getElementById('acquire-spectrum-btn'),
     
     // Spectrum display
@@ -58,8 +59,7 @@ const elements = {
     saveSpectrumBtn: document.getElementById('save-spectrum-btn'),
     copyDataBtn: document.getElementById('copy-data-btn'),
     
-    // Image acquisition
-    acquireImageBtn: document.getElementById('acquire-image-btn'),
+    // Image display
     cameraImage: document.getElementById('camera-image'),
     
     // Log
@@ -68,7 +68,6 @@ const elements = {
     
     // Processing settings
     setProcessingBtn: document.getElementById('set-processing-btn'),
-    subtractDark: document.getElementById('subtract-dark'),
     useMax: document.getElementById('use-max')
 };
 
@@ -81,9 +80,7 @@ function initApp() {
     elements.setGainBtn.addEventListener('click', setGain);
     elements.setRoiBtn.addEventListener('click', setRoi);
     elements.setCalibrationBtn.addEventListener('click', setCalibration);
-    elements.acquireDarkBtn.addEventListener('click', acquireDark);
     elements.acquireSpectrumBtn.addEventListener('click', acquireSpectrum);
-    elements.acquireImageBtn.addEventListener('click', acquireImage);
     elements.saveSpectrumBtn.addEventListener('click', saveSpectrum);
     elements.copyDataBtn.addEventListener('click', copyData);
     elements.clearLogBtn.addEventListener('click', clearLog);
@@ -94,26 +91,32 @@ function initApp() {
     // Initialize tab interface
     initTabInterface();
     
+    // Set up theme toggle
+    setupThemeToggle();
+    
     // Set default values
     elements.exposureTime.value = 100;
     elements.gain.value = 0;
     
     // Initialize default Plotly layout
     appState.plotLayout = {
-        title: 'Spectrum',
+        title: '',
         xaxis: {
             title: 'Wavelength (nm)',
             gridcolor: '#eee'
         },
         yaxis: {
-            title: 'Intensity (max ADC counts, 16-bit)',
+            title: 'Intensity',
             gridcolor: '#eee',
             range: [0, 65535]  // Set default range to the full 16-bit ADC range
         },
-        margin: { t: 50, l: 60, r: 30, b: 60 },
-        plot_bgcolor: '#f8f9fa',
-        paper_bgcolor: '#f8f9fa',
-        hovermode: 'closest'
+        margin: { t: 30, l: 60, r: 30, b: 60 },
+        plot_bgcolor: 'var(--plot-bg-color)',
+        paper_bgcolor: 'var(--plot-bg-color)',
+        hovermode: 'closest',
+        font: {
+            color: 'var(--text-color)'
+        }
     };
     
     // Initialize empty plot
@@ -156,14 +159,12 @@ function initTabInterface() {
 
 // Set processing settings
 async function setProcessingSettings() {
-    const subtractDark = elements.subtractDark.checked;
     const useMax = elements.useMax.checked;
     
     try {
-        logMessage(`Setting processing options: Subtract Dark=${subtractDark}, Use Max=${useMax}`, 'info');
+        logMessage(`Setting processing options: Use Max=${useMax}`, 'info');
         
         await apiRequest('/processing', 'POST', { 
-            subtract_dark: subtractDark,
             use_max: useMax
         });
         
@@ -331,9 +332,8 @@ async function getSpectrumeterSettings() {
             
             if (statusData.processing) {
                 // Update processing settings
-                elements.subtractDark.checked = statusData.processing.subtract_dark || false;
                 elements.useMax.checked = statusData.processing.use_max || false;
-                logMessage(`Processing settings: Subtract Dark=${statusData.processing.subtract_dark}, Use Max=${statusData.processing.use_max}`, 'info');
+                logMessage(`Processing settings: Use Max=${statusData.processing.use_max}`, 'info');
             }
         }
     } catch (error) {
@@ -414,18 +414,6 @@ async function setCalibration() {
     }
 }
 
-// Acquire dark frame
-async function acquireDark() {
-    try {
-        logMessage('Acquiring dark frame...', 'info');
-        const darkData = await apiRequest('/acquire/dark', 'POST');
-        appState.darkFrame = darkData;
-        logMessage('Dark frame acquired successfully', 'success');
-    } catch (error) {
-        logMessage(`Error acquiring dark frame: ${error.message}`, 'error');
-    }
-}
-
 // Acquire spectrum
 async function acquireSpectrum() {
     try {
@@ -486,24 +474,12 @@ function drawSpectrum(wavelengths, intensities) {
         return;
     }
     
-    const trace = {
-        x: wavelengths,
-        y: intensities,
-        type: 'scatter',
-        mode: 'lines',
-        line: {
-            color: '#3498db',
-            width: 2
-        },
-        name: 'Spectrum'
-    };
+    // Update plot data
+    appState.wavelengths = wavelengths;
+    appState.currentSpectrum = intensities;
     
-    Plotly.react('spectrum-plot', [trace], appState.plotLayout, {
-        responsive: true,
-        displayModeBar: true,
-        modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
-        displaylogo: false
-    });
+    // Use the updatePlotlyTheme function to ensure theme consistency
+    updatePlotlyTheme();
 }
 
 // Save spectrum data
@@ -588,9 +564,7 @@ function toggleUIElements(connected) {
     safeToggle(elements.setRoiBtn, !connected);
     safeToggle(elements.setCalibrationBtn, !connected);
     safeToggle(elements.setProcessingBtn, !connected);
-    safeToggle(elements.acquireDarkBtn, !connected);
     safeToggle(elements.acquireSpectrumBtn, !connected);
-    safeToggle(elements.acquireImageBtn, !connected);
     
     // Keep these disabled unless we have spectrum data
     const hasSpectrum = appState.wavelengths && appState.currentSpectrum;
@@ -606,77 +580,6 @@ function logMessage(message, type = 'info') {
     logEntry.textContent = `[${timestamp}] ${message}`;
     elements.logContainer.appendChild(logEntry);
     elements.logContainer.scrollTop = elements.logContainer.scrollHeight;
-}
-
-// Acquire camera image
-async function acquireImage() {
-    try {
-        // Check if we have cached image data from spectrum acquisition
-        if (appState.imageData) {
-            logMessage('Using cached image data from previous acquisition', 'info');
-            displayCachedImage();
-            // Re-enable the button (displayCachedImage doesn't handle this)
-            elements.acquireImageBtn.disabled = false;
-            return;
-        }
-        
-        // If no cached data, acquire a new image
-        logMessage('No cached image data, acquiring new camera image...', 'info');
-        
-        // Disable the button while acquiring
-        elements.acquireImageBtn.disabled = true;
-        
-        // Show loading indicator
-        const imageContainer = elements.cameraImage.parentElement;
-        imageContainer.classList.add('loading');
-        elements.cameraImage.style.display = 'none';
-        
-        // Call the API with a query parameter to request a scaled image directly from the server
-        const response = await fetch(`${API_BASE_URL}/acquire/image?scale=0.5`, {
-            headers: {
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            },
-            cache: 'no-store' // Tell browser not to cache
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Server responded with status: ${response.status}`);
-        }
-        
-        // Get the image as a blob
-        const imageBlob = await response.blob();
-        
-        // Create an object URL for the blob
-        const imageUrl = URL.createObjectURL(imageBlob);
-        
-        // Set image directly without additional processing
-        elements.cameraImage.onload = function() {
-            // Remove loading indicator and show image
-            imageContainer.classList.remove('loading');
-            elements.cameraImage.style.display = 'block';
-            
-            // Re-enable the button once image is loaded
-            elements.acquireImageBtn.disabled = false;
-            logMessage('Camera image acquired successfully', 'success');
-        };
-        
-        elements.cameraImage.src = imageUrl;
-    } catch (error) {
-        // Show error status
-        const imageContainer = elements.cameraImage.parentElement;
-        imageContainer.classList.remove('loading');
-        imageContainer.classList.add('error');
-        
-        // Re-enable the button on error
-        elements.acquireImageBtn.disabled = false;
-        logMessage(`Error acquiring image: ${error.message}`, 'error');
-        
-        // Remove error class after 3 seconds
-        setTimeout(() => {
-            imageContainer.classList.remove('error');
-        }, 3000);
-    }
 }
 
 // Clear log
@@ -702,4 +605,96 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize the application
     initApp();
-}); 
+});
+
+// Theme toggle functionality
+function setupThemeToggle() {
+    if (!elements.themeToggleBtn || !elements.themeIcon) {
+        logMessage('Theme toggle elements not found', 'warning');
+        return;
+    }
+
+    // Check for saved user preference
+    const savedTheme = localStorage.getItem('theme');
+    
+    // Set initial theme
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        elements.themeIcon.textContent = '☀️'; // Sun icon for switching to light
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        elements.themeIcon.textContent = '🌙'; // Moon icon for switching to dark
+    }
+    
+    // Add event listener
+    elements.themeToggleBtn.addEventListener('click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        
+        if (currentTheme === 'dark') {
+            document.documentElement.removeAttribute('data-theme');
+            localStorage.setItem('theme', 'light');
+            elements.themeIcon.textContent = '🌙'; // Moon icon for switching to dark
+            logMessage('Light theme activated', 'info');
+            
+            // Update Plotly theme
+            updatePlotlyTheme();
+        } else {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            localStorage.setItem('theme', 'dark');
+            elements.themeIcon.textContent = '☀️'; // Sun icon for switching to light
+            logMessage('Dark theme activated', 'info');
+            
+            // Update Plotly theme
+            updatePlotlyTheme();
+        }
+    });
+}
+
+// Update Plotly theme
+function updatePlotlyTheme() {
+    if (!elements.spectrumPlot) return;
+    
+    // Only update if we have a plot with data
+    if (appState.wavelengths && appState.currentSpectrum) {
+        // Determine line color based on theme
+        const lineColor = document.documentElement.getAttribute('data-theme') === 'dark' ? 
+            '#00b4ff' : // Thorlabs blue for dark mode
+            '#3498db';  // Original blue for light mode
+            
+        Plotly.react('spectrum-plot', [{
+            x: appState.wavelengths,
+            y: appState.currentSpectrum,
+            type: 'scatter',
+            mode: 'lines',
+            line: {
+                color: lineColor,
+                width: 2
+            },
+            name: 'Spectrum'
+        }], {
+            ...appState.plotLayout,
+            plot_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--plot-bg-color').trim(),
+            paper_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--plot-bg-color').trim(),
+            font: {
+                color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim()
+            },
+            xaxis: {
+                ...appState.plotLayout.xaxis,
+                gridcolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
+                zerolinecolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
+                showgrid: true
+            },
+            yaxis: {
+                ...appState.plotLayout.yaxis,
+                gridcolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
+                zerolinecolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
+                showgrid: true
+            }
+        }, {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+            displaylogo: false
+        });
+    }
+} 

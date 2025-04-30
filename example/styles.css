@@ -10,6 +10,28 @@
     --success-color: #27ae60;
     --warning-color: #f39c12;
     --error-color: #c0392b;
+    --plot-bg-color: #f8f9fa;
+    --input-bg-color: #ffffff;
+    --button-secondary-bg: #ecf0f1;
+    --button-hover-bg: #dfe6e9;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+    --primary-color: #121212;          /* Darker background for main elements */
+    --secondary-color: #00b4ff;        /* Blue accent from Thorlabs screenshot */
+    --accent-color: #ff0000;           /* Thorlabs red color */
+    --background-color: #1c1c1c;       /* Almost black background from screenshot */
+    --panel-color: #232323;            /* Slightly lighter panel background */
+    --text-color: #ffffff;             /* Bright white text for good contrast */
+    --border-color: #333333;           /* Darker borders */
+    --success-color: #4caf50;          /* Green for positive indicators */
+    --warning-color: #ffeb3b;          /* Bright yellow for warnings */
+    --error-color: #ff3d00;            /* Bright red for errors */
+    --plot-bg-color: #232323;          /* Match the panel color */
+    --input-bg-color: #333333;         /* Darker input fields */
+    --button-secondary-bg: #333333;    /* Darker button background */
+    --button-hover-bg: #444444;        /* Lighter on hover */
 }
 
 * {
@@ -17,6 +39,7 @@
     padding: 0;
     box-sizing: border-box;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 body {
@@ -28,7 +51,7 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 20px 0;
 }
 
 header {
@@ -71,41 +94,115 @@ header h1 {
 
 .connecting {
     background-color: var(--warning-color);
-    color: white;
+    color: black;
 }
 
 .main-content {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    padding: 0 15px;
 }
 
-.settings-panel, .acquisition-panel, .log-panel {
+.panels-row {
+    display: flex;
+    gap: 15px;
+    width: 100%;
+}
+
+/* Consistent panel styles for both themes */
+.settings-panel, .acquisition-panel, .log-panel, .camera-panel {
     background-color: var(--panel-color);
     border-radius: 8px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     padding: 20px;
     margin-bottom: 20px;
     width: 100%;
+    border: 1px solid var(--border-color);
 }
 
-/* Adjust acquisition panels to be wider */
-.acquisition-panel {
-    min-height: 400px;
+/* Set the width distribution between settings and camera panels */
+.settings-panel {
+    flex: 3;  /* Take 60% of the available space */
 }
 
+.camera-panel {
+    flex: 2;  /* Take 40% of the available space */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Panel styles for dark mode */
+[data-theme="dark"] .camera-panel {
+    background-color: #232323;
+    /* Keep border color consistent with other dark mode panels */
+}
+
+[data-theme="dark"] .camera-panel h2 {
+    color: #fff;
+    border-bottom-color: #444;
+    padding: 8px 0;
+    margin-top: -5px;
+    margin-bottom: 15px;
+    font-size: 20px; /* Match light mode h2 font size */
+}
+
+[data-theme="dark"] .settings-panel {
+    background-color: #232323;
+    /* Keep border color consistent with other dark mode panels */
+}
+
+[data-theme="dark"] .settings-panel h2 {
+    color: #fff;
+    border-bottom-color: #444;
+    padding: 8px 0;
+    margin-top: -5px;
+    margin-bottom: 15px;
+    font-size: 20px; /* Match light mode h2 font size */
+}
+
+[data-theme="dark"] .acquisition-panel {
+    background-color: #232323;
+    /* Keep border color consistent with other dark mode panels */
+}
+
+[data-theme="dark"] .acquisition-panel h2 {
+    color: #fff;
+    border-bottom-color: #444;
+    text-align: center;
+    padding: 8px 0;
+    margin-top: -5px;
+    margin-bottom: 15px;
+    font-size: 20px; /* Match light mode h2 font size */
+}
+
+/* Consistent heading styles for both themes */
 h2 {
     color: var(--primary-color);
     margin-bottom: 15px;
+    margin-top: 0;
     font-size: 20px;
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 10px;
+}
+
+/* Dark mode header styling */
+[data-theme="dark"] h2 {
+    color: var(--text-color);
+    border-bottom-color: #444;
+    /* Keep other styles consistent with normal h2 */
 }
 
 h3 {
     font-size: 16px;
     margin: 15px 0 10px;
     color: var(--primary-color);
+}
+
+/* Ensure consistent h3 size in dark mode */
+[data-theme="dark"] h3 {
+    font-size: 16px;
+    color: var(--text-color);
 }
 
 .settings-content {
@@ -145,6 +242,8 @@ input, select {
     border-radius: 4px;
     font-size: 14px;
     width: 100px;
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
 }
 
 input:focus, select:focus {
@@ -172,14 +271,38 @@ button {
     background-color: #2980b9;
 }
 
+[data-theme="dark"] .primary-btn {
+    background-color: #333;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 2px;
+    font-size: 14px; /* Match light mode button font size */
+}
+
+[data-theme="dark"] .primary-btn:hover {
+    background-color: #444;
+}
+
 .secondary-btn {
-    background-color: #ecf0f1;
+    background-color: var(--button-secondary-bg);
     color: var(--primary-color);
     margin-left: 10px;
 }
 
 .secondary-btn:hover {
-    background-color: #dfe6e9;
+    background-color: var(--button-hover-bg);
+}
+
+[data-theme="dark"] .secondary-btn {
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 2px;
+    font-size: 14px; /* Match light mode button font size */
+}
+
+[data-theme="dark"] .secondary-btn:hover {
+    background-color: #444;
 }
 
 button:disabled {
@@ -189,15 +312,26 @@ button:disabled {
 
 .acquisition-buttons {
     display: flex;
-    justify-content: center;
-    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 15px;
+    width: 100%;
+}
+
+.left-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.right-buttons {
+    display: flex;
+    gap: 10px;
 }
 
 .spectrum-container {
     width: 100%;
     height: 400px;
-    background-color: #f8f9fa;
+    background-color: var(--plot-bg-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     margin-bottom: 15px;
@@ -205,12 +339,18 @@ button:disabled {
     overflow: hidden;
 }
 
+[data-theme="dark"] .spectrum-container {
+    border-color: #333;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    background-color: #232323;
+}
+
 #spectrum-plot {
     width: 100%;
     height: 100%;
 }
 
-.plot-controls, .data-export {
+.plot-controls {
     display: flex;
     justify-content: center;
     gap: 10px;
@@ -221,17 +361,19 @@ button:disabled {
     padding: 6px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
 }
 
 .plot-controls input:disabled {
-    background-color: #f5f5f5;
+    background-color: var(--border-color);
     cursor: not-allowed;
 }
 
 .image-container {
     width: 100%;
     height: 400px;
-    background-color: #f8f9fa;
+    background-color: var(--plot-bg-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     margin-bottom: 15px;
@@ -268,6 +410,12 @@ button:disabled {
     background-color: rgba(255, 0, 0, 0.1);
 }
 
+/* Ensure consistent font size in dark mode for image container status messages */
+[data-theme="dark"] .image-container::after {
+    font-size: 16px;
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
 #camera-image {
     max-width: 100%;
     max-height: 100%;
@@ -282,19 +430,29 @@ button:disabled {
 #log-container {
     height: 150px;
     overflow-y: auto;
-    background-color: #f8f9fa;
+    background-color: var(--plot-bg-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 10px;
     font-family: monospace;
     font-size: 12px;
     margin-bottom: 10px;
+    color: var(--text-color);
+}
+
+/* Ensure consistent font size in dark mode for log entries */
+[data-theme="dark"] #log-container {
+    font-size: 12px;
 }
 
 .log-entry {
     margin-bottom: 5px;
     border-bottom: 1px solid #eee;
     padding-bottom: 2px;
+}
+
+[data-theme="dark"] .log-entry {
+    border-bottom: 1px solid #333;
 }
 
 .log-info {
@@ -316,12 +474,15 @@ button:disabled {
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .main-content {
-        display: flex;
         flex-direction: column;
-        gap: 15px;
+    }
+
+    .panels-row {
+        flex-direction: column;
     }
     
-    .settings-panel, .acquisition-panel, .log-panel {
+    .settings-panel, .acquisition-panel, .log-panel, .camera-panel {
+        width: 100%;
         padding: 15px;
     }
     
@@ -360,6 +521,16 @@ button:disabled {
     .secondary-btn {
         margin-left: 0;
         margin-top: 5px;
+    }
+    
+    .acquisition-buttons {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .left-buttons, .right-buttons {
+        width: 100%;
+        justify-content: center;
     }
 }
 
@@ -430,7 +601,7 @@ button:disabled {
     top: -30px;
     transform: translateX(-50%);
     background-color: var(--primary-color);
-    color: white;
+    color: var(--panel-color);
     padding: 5px 10px;
     border-radius: 4px;
     font-size: 12px;
@@ -450,8 +621,114 @@ button:disabled {
     z-index: 10;
 }
 
+/* Ensure consistent tooltip font size in dark mode */
+[data-theme="dark"] .tooltip {
+    font-size: 12px;
+}
+
+[data-theme="dark"] .tooltip:hover::after {
+    font-size: 12px;
+}
+
 /* Checkbox styles */
 input[type="checkbox"] {
     width: auto;
     margin-right: 10px;
-} 
+}
+
+/* Style for the theme toggle button */
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-color);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 50%;
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+    width: 42px;
+    height: 42px;
+}
+
+.icon-btn:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .icon-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+#theme-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+[data-theme="dark"] header {
+    background-color: #1c1c1c;
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+}
+
+[data-theme="dark"] header h1 {
+    color: #ff0000;
+    font-weight: bold;
+    font-size: 24px; /* Match light mode h1 font size */
+}
+
+/* Update script.js to use these colors for the plot */
+[data-theme="dark"] #spectrum-plot .gridlayer path {
+    stroke: #444 !important;
+}
+
+[data-theme="dark"] #spectrum-plot .trace {
+    stroke: #00b4ff !important;
+}
+
+/* Adjust acquisition panels to be wider */
+.acquisition-panel {
+    min-height: 400px;
+}
+
+/* Thorlabs-style toggle switches */
+[data-theme="dark"] .tab-btn {
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 2px;
+    font-size: 14px; /* Match light mode tab button font size */
+}
+
+[data-theme="dark"] .tab-btn:hover {
+    background-color: #444;
+}
+
+[data-theme="dark"] .tab-btn.active {
+    background-color: #444;
+    color: #00b4ff;
+    border-color: #555;
+    border-bottom: 2px solid #00b4ff;
+    font-size: 14px; /* Match light mode active tab button font size */
+}
+
+[data-theme="dark"] body {
+    background-color: #1c1c1c;
+}
+
+/* Remove these redundant styles since they're now in the main container/content rules
+[data-theme="dark"] .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+[data-theme="dark"] .main-content {
+    padding: 0 15px;
+}
+
+[data-theme="dark"] .panels-row {
+    gap: 15px;
+} */ 

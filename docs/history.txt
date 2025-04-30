@@ -512,3 +512,150 @@ Date: 2025-05-01 21:30:00
    - Removed manual window resize handling
    - Integrated with existing spectrum calculation
    - Preserved spectrum statistics display for continuity 
+
+USER INTERFACE REFINEMENTS
+--------------------------
+Date: 2025-05-02 10:45:00
+
+1. Button grouping and alignment improvements:
+   - Moved "Save Spectrum" and "Copy Data" buttons to the acquisition row
+   - Aligned acquisition buttons with "Acquire Spectrum" on the left and export buttons on the right
+   - Added flex container with space-between layout for button positioning
+   - Enhanced responsive behavior for different screen sizes
+   - Created clean visual grouping of related functionality
+
+2. Panel layout restructuring:
+   - Moved the "Camera Output" panel to the same row as the Settings panel
+   - Created a side-by-side layout with 60/40 split between settings and camera output
+   - Renamed "Image Acquisition" to "Camera Output" for clarity
+   - Removed "Refresh Image" button since image updates automatically
+   - Enhanced responsive behavior for mobile devices with column layout
+
+3. Automatic image display:
+   - Modified acquisition code to always show camera image when acquiring spectrum
+   - Removed redundant image refresh functionality
+   - Maintained image caching for performance optimization
+   - Improved error handling for image display
+   - Enhanced visual feedback during image loading
+
+4. Code quality improvements:
+   - Simplified JavaScript event handling by removing unused button listeners
+   - Enhanced CSS with better responsive design patterns
+   - Improved DOM organization with logical component grouping
+   - Added proper responsive styling for mobile breakpoints
+   - Maintained theme consistency across new layout components 
+
+INTERFACE STREAMLINING
+---------------------
+Date: 2025-05-02 14:30:00
+
+1. Settings panel simplification:
+   - Removed header text from each settings tab
+   - Eliminated redundant "Camera Settings", "ROI Settings", "Calibration", and "Processing Settings" headers
+   - Streamlined the interface for a cleaner, more minimal appearance
+   - Maintained all functionality while reducing visual clutter
+   - Improved vertical spacing for better use of screen real estate 
+
+2. Additional interface refinements:
+   - Changed main header from "ASI183MM Spectrometer Control" to "Thorlabs Raman Spectrometer"
+   - Removed the "Acquisition" section header
+   - Further reduced visual clutter for a more professional appearance
+   - Improved overall interface consistency
+   - Enhanced focus on interactive elements by reducing static text elements 
+
+PLOT VISUALIZATION ENHANCEMENTS
+------------------------------
+Date: 2025-05-02 15:30:00
+
+1. Plot simplification and clarity improvements:
+   - Removed "Spectrum" title from the plot for a cleaner appearance
+   - Simplified y-axis label from "Intensity (max ADC counts, 16-bit)" to just "Intensity"
+   - Reduced top margin (t value) from 50px to 30px to improve space utilization
+   - Created a more streamlined data visualization with focus on the spectrum itself
+   - Enhanced the professional appearance of the data display 
+
+INTERFACE USABILITY ENHANCEMENTS
+--------------------------------
+Date: 2025-05-02 16:45:00
+
+1. Added tooltips to all interactive elements:
+   - Added descriptive tooltips to all buttons explaining their functions
+   - Added tooltips to all input fields explaining expected values and ranges
+   - Added tooltips to settings tabs for better feature discovery
+   - Enhanced the camera image element with a descriptive tooltip
+   - Maintained consistent tooltip styles across the interface
+
+2. Manual index.html changes integration:
+   - Updated ROI related values to match the camera's full sensor size
+   - Updated wavelength calibration default values
+   - Extended the maximum exposure time from 30,000ms to 600,000ms
+   - Improved consistency across input field default values
+   - Aligned all interface elements with current hardware specifications 
+
+DARK THEME REFINEMENT
+--------------------
+Date: 2025-05-02 18:00:00
+
+1. Redesigned dark theme color palette:
+   - Updated to match industry-standard instrumentation software
+   - Implemented darker, more contrast-friendly background colors
+   - Changed accent colors to match professional monitoring software
+   - Added bright red highlighting for important interface elements
+   - Improved text contrast for better readability in low-light conditions
+
+2. Enhanced dark mode panel styling:
+   - Added distinct styling for the Camera Output panel with red header
+   - Improved panel borders and shadows for better depth perception
+   - Updated button styles with more distinct hover states
+   - Enhanced plot container appearance with subtle shadows
+   - Refined header styling for better visual hierarchy
+
+3. Improved status indicators:
+   - Updated warning color to high-visibility yellow with black text
+   - Enhanced connected/disconnected states for better status visibility
+   - Maintained consistent visual language with instrumentation software
+   - Ensured accessibility standards for color contrast
+   - Created cohesive color system across all interface elements 
+
+THORLABS-SPECIFIC THEME IMPLEMENTATION
+-------------------------------------
+Date: 2025-05-02 18:45:00
+
+1. Refined dark theme to match Thorlabs software exactly:
+   - Updated blue accent color to match Thorlabs CSL-M0009 spectral line color (#00b4ff)
+   - Adjusted background to darker black (#1c1c1c) to match Thorlabs software
+   - Changed panel background to proper dark gray (#232323)
+   - Modified grid lines in plot to match Thorlabs software styling
+   - Created consistent visual identity with Thorlabs product line
+
+2. Improved UI layout to match Thorlabs software:
+   - Centered panel headers with proper spacing
+   - Adjusted padding and margins to match Thorlabs interface
+   - Modified button styling to match Thorlabs software components
+   - Updated tab styling with blue indicator for selected tab
+   - Created more professional, industrial look and feel
+
+3. Enhanced plot representation:
+   - Added proper grid lines to match Thorlabs spectral plot
+   - Updated axis styling for consistency with Thorlabs software
+   - Changed spectral line color to Thorlabs blue
+   - Improved overall chart readability
+   - Created more scientifically accurate visualization 
+
+THEME CONSISTENCY IMPROVEMENTS
+-----------------------------
+Date: 2025-05-02 19:30:00
+
+1. Unified layout between light and dark modes:
+   - Standardized container padding and margins across themes
+   - Normalized panel spacing and dimensions for consistent positioning
+   - Aligned heading styles to prevent layout shifts when changing themes
+   - Consolidated duplicate CSS properties to improve maintainability
+   - Ensured consistent border and shadow styles between modes
+
+2. Fixed interface stability issues:
+   - Eliminated layout shifts when toggling between light and dark modes
+   - Standardized content padding across all interface components
+   - Created consistent panel border treatment for both themes
+   - Improved header alignment and spacing consistency
+   - Enhanced overall UI stability during theme transitions 
