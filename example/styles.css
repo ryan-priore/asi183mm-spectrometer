@@ -573,6 +573,41 @@ button:disabled {
     display: block;
 }
 
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.settings-header h2 {
+    margin-bottom: 0;
+    border-bottom: none;
+    flex: 1;
+}
+
+.settings-header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* Media query for responsive design */
+@media (max-width: 768px) {
+    .settings-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .settings-header h2 {
+        margin-bottom: 10px;
+    }
+    
+    .settings-header-buttons {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }

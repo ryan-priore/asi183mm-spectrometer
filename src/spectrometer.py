@@ -11,6 +11,7 @@ from scipy import interpolate
 from PIL import Image
 
 from camera import ASI183Camera
+from settings_manager import settings_manager
 
 logger = logging.getLogger(__name__)
 
@@ -31,25 +32,45 @@ class Spectrometer:
         self.camera = ASI183Camera(sdk_path)
         self.connected = False
         
-        # Default calibration (wavelength vs. pixel position)
-        # This should be loaded from a calibration file
-        self._wavelength_coeffs = [0.0, 1.0]  # Linear calibration as placeholder
+        # Load settings from settings manager
+        settings = settings_manager.get_settings()
         
-        # ROI settings for spectroscopy
+        # Calibration settings
+        calibration_settings = settings.get('calibration', {})
+        self._wavelength_coeffs = calibration_settings.get('wavelength_coefficients', [0.0, 1.0])
+        self.laser_wavelength = calibration_settings.get('laser_wavelength', 445.0)
+        
+        # ROI settings
+        roi_settings = settings.get('camera', {}).get('roi', {})
         self.roi_settings = {
-            "start_x": 0,
-            "start_y": 0,
-            "width": None,  # Will use max width when connected
-            "height": None,  # Will use a reasonable default when connected
-            "binning": 1
+            "start_x": roi_settings.get('start_x', 0),
+            "start_y": roi_settings.get('start_y', 0),
+            "width": roi_settings.get('width', None),  # Will use max width when connected
+            "height": roi_settings.get('height', 100),  # Default to a reasonable value
+            "binning": roi_settings.get('binning', 1)
         }
+        
+        # Camera settings
+        camera_settings = settings.get('camera', {})
+        self.exposure_ms = camera_settings.get('exposure_ms', 100)
+        self.gain = camera_settings.get('gain', 0)
         
         # Background and dark frames
         self.dark_frame = None
         
         # Processing settings
-        self.subtract_dark = False
-        self.use_max = False  # False = use mean (default), True = use max
+        processing_settings = settings.get('processing', {})
+        spectrometer_settings = settings.get('spectrometer', {})
+        
+        self.subtract_dark = spectrometer_settings.get('subtract_dark', False)
+        
+        # Get readout mode from settings
+        self.use_max = False
+        if 'readout_mode' in processing_settings:
+            self.use_max = (processing_settings.get('readout_mode') == 'maximum')
+            
+        self.baseline_correction = processing_settings.get('baseline_correction', 'none')
+        self.polynomial_degree = processing_settings.get('polynomial_degree', 4)
     
     def connect(self) -> bool:
         """
@@ -61,31 +82,78 @@ class Spectrometer:
         if self.camera.connect():
             self.connected = True
             
-            # Set default ROI for spectroscopy
-            # For a spectrometer, we typically want a thin horizontal strip
-            # in the center of the sensor
+            # Set default ROI for spectroscopy based on camera info
             camera_info = self.camera.get_camera_info()
             max_height = camera_info["max_height"]
             max_width = camera_info["max_width"]
             
-            # Use full width, but only a portion of height centered on the sensor
-            # This assumes the spectrum is projected horizontally across the sensor
-            spectrum_height = min(100, max_height // 4)  # Reasonable default
-            start_y = (max_height - spectrum_height) // 2
-            
-            self.roi_settings = {
-                "start_x": 0,
-                "start_y": start_y,
-                "width": max_width,
-                "height": spectrum_height,
-                "binning": 1
-            }
+            # Update ROI width if not set
+            if self.roi_settings["width"] is None:
+                self.roi_settings["width"] = max_width
+                
+            # Update ROI height if using default value
+            if self.roi_settings["height"] == 100:
+                # Use full width, but only a portion of height centered on the sensor
+                spectrum_height = min(100, max_height // 4)  # Reasonable default
+                start_y = (max_height - spectrum_height) // 2
+                self.roi_settings["start_y"] = start_y
+                self.roi_settings["height"] = spectrum_height
             
             # Apply ROI settings
             self.set_roi(**self.roi_settings)
             
+            # Apply exposure and gain settings
+            self.set_exposure(self.exposure_ms)
+            self.set_gain(self.gain)
+            
+            # Save updated settings
+            self._save_settings()
+            
             return True
         return False
+    
+    def _save_settings(self) -> None:
+        """
+        Save current settings to the settings manager
+        """
+        # Update ROI settings
+        settings_manager.update_settings({
+            'roi': {
+                'start_x': self.roi_settings['start_x'],
+                'start_y': self.roi_settings['start_y'],
+                'width': self.roi_settings['width'],
+                'height': self.roi_settings['height'],
+                'binning': self.roi_settings['binning']
+            },
+            'exposure_ms': self.exposure_ms,
+            'gain': self.gain
+        }, 'camera')
+        
+        # Update calibration settings
+        settings_manager.update_settings({
+            'wavelength_coefficients': self._wavelength_coeffs,
+            'laser_wavelength': self.laser_wavelength
+        }, 'calibration')
+        
+        # Update processing settings
+        settings_manager.update_settings({
+            'readout_mode': 'maximum' if self.use_max else 'average',
+            'baseline_correction': self.baseline_correction,
+            'polynomial_degree': self.polynomial_degree
+        }, 'processing')
+        
+        # Update spectrometer settings
+        settings_manager.update_settings({
+            'subtract_dark': self.subtract_dark,
+            'subtract_background': False  # Keeping for compatibility
+        }, 'spectrometer')
+        
+        # We don't have direct access to the display mode here, but we can ensure
+        # the pixels_range is properly set based on the current ROI
+        if self.roi_settings['width'] is not None:
+            settings_manager.update_settings({
+                'pixels_range': [0, self.roi_settings['width'] - 1]
+            }, 'display')
     
     def set_roi(self, start_x: int = 0, start_y: int = 0, 
                 width: Optional[int] = None, height: Optional[int] = None,
@@ -114,30 +182,99 @@ class Spectrometer:
         
         # Apply to camera
         self.camera.set_roi(start_x, start_y, width, height, binning)
+        
+        # Save updated settings
+        self._save_settings()
     
-    def set_exposure(self, exposure_ms: int) -> None:
+    def set_exposure(self, exposure_ms: int, skip_save: bool = False) -> None:
         """
         Set camera exposure time
         
         Args:
             exposure_ms: Exposure time in milliseconds
+            skip_save: If True, don't save settings after setting exposure
         """
         if not self.connected:
             raise RuntimeError("Spectrometer not connected")
             
+        self.exposure_ms = exposure_ms
         self.camera.set_exposure(exposure_ms)
+        
+        # Save updated settings unless skipped
+        if not skip_save:
+            self._save_settings()
     
-    def set_gain(self, gain: int) -> None:
+    def set_gain(self, gain: int, skip_save: bool = False) -> None:
         """
         Set camera gain
         
         Args:
             gain: Gain value
+            skip_save: If True, don't save settings after setting gain
         """
         if not self.connected:
             raise RuntimeError("Spectrometer not connected")
             
+        self.gain = gain
         self.camera.set_gain(gain)
+        
+        # Save updated settings unless skipped
+        if not skip_save:
+            self._save_settings()
+    
+    def set_processing_settings(self, use_max: Optional[bool] = None, 
+                                readout_mode: Optional[str] = None,
+                                baseline_correction: Optional[str] = None,
+                                polynomial_degree: Optional[int] = None) -> None:
+        """
+        Update processing settings
+        
+        Args:
+            use_max: Whether to use maximum instead of mean for spectrum extraction
+            readout_mode: Readout mode: 'average' or 'maximum' (takes precedence over use_max if both provided)
+            baseline_correction: Baseline correction method ('none', 'linear', 'polynomial')
+            polynomial_degree: Degree for polynomial baseline correction
+        """
+        # Handle readout_mode parameter (preferred) or use_max
+        if readout_mode is not None:
+            self.use_max = (readout_mode == 'maximum')
+        elif use_max is not None:
+            self.use_max = use_max
+        
+        if baseline_correction is not None:
+            self.baseline_correction = baseline_correction
+            
+        if polynomial_degree is not None:
+            self.polynomial_degree = polynomial_degree
+            
+        # Save updated settings
+        self._save_settings()
+    
+    def set_wavelength_calibration(self, coefficients: List[float]) -> None:
+        """
+        Set the wavelength calibration coefficients
+        
+        Args:
+            coefficients: List of polynomial coefficients [c0, c1, c2, ...]
+                         For converting pixel to wavelength:
+                         wavelength = c0 + c1*pixel + c2*pixel^2 + ...
+        """
+        self._wavelength_coeffs = list(coefficients)
+        
+        # Save updated settings
+        self._save_settings()
+    
+    def set_laser_wavelength(self, wavelength: float) -> None:
+        """
+        Set the laser wavelength for Raman shift calculations
+        
+        Args:
+            wavelength: Laser wavelength in nm
+        """
+        self.laser_wavelength = wavelength
+        
+        # Save updated settings
+        self._save_settings()
     
     def acquire_dark_frame(self) -> np.ndarray:
         """
@@ -157,7 +294,7 @@ class Spectrometer:
                          subtract_dark: Optional[bool] = None,
                          smoothing: Optional[bool] = False,  # Set default to False
                          return_raw: bool = False,
-                         use_max: Optional[bool] = None
+                         readout_mode: Optional[str] = None
                         ) -> Union[Tuple[np.ndarray, np.ndarray], np.ndarray]:
         """
         Acquire a spectrum from the camera
@@ -166,8 +303,7 @@ class Spectrometer:
             subtract_dark: Whether to subtract dark frame (None uses default setting)
             smoothing: No longer used, kept for backward compatibility
             return_raw: If True, returns the raw 2D image instead of processed spectrum
-            use_max: Whether to use maximum instead of mean for spectrum extraction
-                    (None uses default setting)
+            readout_mode: 'average' or 'maximum' (None uses default setting)
             
         Returns:
             Tuple of (wavelengths, intensities) as NumPy arrays, or raw image if return_raw=True
@@ -179,8 +315,10 @@ class Spectrometer:
         if subtract_dark is None:
             subtract_dark = self.subtract_dark
             
-        if use_max is None:
-            use_max = self.use_max
+        # Convert readout_mode to use_max for internal processing
+        use_max = self.use_max
+        if readout_mode is not None:
+            use_max = (readout_mode == 'maximum')
             
         # Acquire raw image
         raw_image = self.camera.capture_raw()
@@ -212,15 +350,14 @@ class Spectrometer:
     
     def process_spectrum(self, raw_image: np.ndarray, 
                        subtract_dark: Optional[bool] = None,
-                       use_max: Optional[bool] = None) -> Tuple[np.ndarray, np.ndarray]:
+                       readout_mode: Optional[str] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
         Process a raw image into a spectrum
         
         Args:
             raw_image: Raw 2D image data
             subtract_dark: Whether to subtract dark frame (None uses default setting)
-            use_max: Whether to use maximum instead of mean for spectrum extraction
-                    (None uses default setting)
+            readout_mode: 'average' or 'maximum' (None uses default setting)
             
         Returns:
             Tuple of (wavelengths, intensities) as NumPy arrays
@@ -232,8 +369,10 @@ class Spectrometer:
         if subtract_dark is None:
             subtract_dark = self.subtract_dark
             
-        if use_max is None:
-            use_max = self.use_max
+        # Convert readout_mode to use_max for internal processing
+        use_max = self.use_max
+        if readout_mode is not None:
+            use_max = (readout_mode == 'maximum')
             
         # Apply dark frame correction if needed
         if subtract_dark and self.dark_frame is not None:
@@ -256,17 +395,6 @@ class Spectrometer:
         wavelengths = self.pixel_to_wavelength(pixel_positions)
         
         return wavelengths, spectrum
-    
-    def set_wavelength_calibration(self, coefficients: List[float]) -> None:
-        """
-        Set wavelength calibration coefficients
-        
-        Args:
-            coefficients: Polynomial coefficients [c0, c1, c2, ...] for converting
-                        pixel position to wavelength: 
-                        wavelength = c0 + c1*x + c2*x^2 + ...
-        """
-        self._wavelength_coeffs = coefficients
     
     def pixel_to_wavelength(self, pixel_positions: np.ndarray) -> np.ndarray:
         """

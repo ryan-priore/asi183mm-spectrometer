@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 import base64
 from io import BytesIO
+import json
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query, Body
@@ -17,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from spectrometer import Spectrometer
+from settings_manager import settings_manager
 
 # Configure logging
 logging.basicConfig(
@@ -68,11 +70,15 @@ class WavelengthCalibration(BaseModel):
         ..., 
         description="Polynomial coefficients [c0, c1, c2, ...] for converting pixel to wavelength"
     )
+    laser_wavelength: Optional[float] = Field(
+        None,
+        description="Laser wavelength in nm for Raman shift calculations"
+    )
 
 class ProcessingSettings(BaseModel):
     """Spectrum processing settings"""
     subtract_dark: Optional[bool] = Field(None, description="Whether to subtract dark frame")
-    use_max: Optional[bool] = Field(None, description="Whether to use maximum instead of mean for spectrum extraction")
+    readout_mode: Optional[str] = Field(None, description="Readout mode: 'average' or 'maximum'")
 
 class SpectrumResponse(BaseModel):
     """Response model for spectrum data"""
@@ -110,17 +116,26 @@ async def get_status(spectrometer: Spectrometer = Depends(get_spectrometer)):
     camera_info = spectrometer.camera.get_camera_info()
     settings = spectrometer.camera.get_settings()
     
+    # Include more explicit exposure settings
+    # The ASI camera returns exposure in microseconds as "Exposure"
+    # Add exposure_ms for clarity
+    if "Exposure" in settings:
+        settings["exposure_ms"] = round(settings["Exposure"] / 1000)
+    
     return {
         "connected": spectrometer.connected,
         "camera_info": camera_info,
         "settings": settings,
         "roi": spectrometer.roi_settings,
         "calibration": {
-            "coefficients": spectrometer._wavelength_coeffs
+            "coefficients": spectrometer._wavelength_coeffs,
+            "laser_wavelength": spectrometer.laser_wavelength
         },
         "processing": {
             "subtract_dark": spectrometer.subtract_dark,
-            "use_max": spectrometer.use_max
+            "readout_mode": "maximum" if spectrometer.use_max else "average",
+            "baseline_correction": spectrometer.baseline_correction,
+            "polynomial_degree": spectrometer.polynomial_degree
         }
     }
 
@@ -137,6 +152,69 @@ async def connect_spectrometer(background_tasks: BackgroundTasks):
         return {"message": "Already connected"}
     
     if spectrometer.connect():
+        # Load and apply default settings from default_settings.json to the camera after connecting
+        try:
+            # Get default settings
+            with open(settings_manager.default_path, 'r') as f:
+                default_settings = json.load(f)
+                
+            # Apply camera settings
+            camera_settings = default_settings.get('camera', {})
+            exposure_ms = camera_settings.get('exposure_ms')
+            gain = camera_settings.get('gain')
+            
+            logger.info(f"Applying default settings from {settings_manager.default_path}")
+            logger.info(f"Default exposure: {exposure_ms}ms, gain: {gain}")
+            
+            # Set exposure and gain
+            if exposure_ms is not None:
+                spectrometer.set_exposure(exposure_ms)
+            if gain is not None:
+                spectrometer.set_gain(gain)
+                
+            # Apply ROI settings
+            roi_settings = camera_settings.get('roi', {})
+            if roi_settings:
+                spectrometer.set_roi(
+                    start_x=roi_settings.get('start_x', 0),
+                    start_y=roi_settings.get('start_y', 0),
+                    width=roi_settings.get('width', None),
+                    height=roi_settings.get('height', None),
+                    binning=roi_settings.get('binning', 1)
+                )
+                
+            # Apply calibration settings
+            calibration_settings = default_settings.get('calibration', {})
+            if calibration_settings:
+                # Set wavelength calibration coefficients
+                wavelength_coeffs = calibration_settings.get('wavelength_coefficients')
+                if wavelength_coeffs:
+                    spectrometer.set_wavelength_calibration(wavelength_coeffs)
+                
+                # Set laser wavelength
+                laser_wavelength = calibration_settings.get('laser_wavelength')
+                if laser_wavelength:
+                    spectrometer.set_laser_wavelength(laser_wavelength)
+                    
+            # Apply processing settings
+            processing_settings = default_settings.get('processing', {})
+            if processing_settings:
+                # Handle readout_mode
+                readout_mode = processing_settings.get('readout_mode')
+                baseline_correction = processing_settings.get('baseline_correction')
+                polynomial_degree = processing_settings.get('polynomial_degree')
+                
+                spectrometer.set_processing_settings(
+                    readout_mode=readout_mode,
+                    baseline_correction=baseline_correction,
+                    polynomial_degree=polynomial_degree
+                )
+                
+            logger.info("Successfully applied default settings from default_settings.json")
+        except Exception as e:
+            logger.error(f"Error applying default settings: {e}")
+            # Continue even if settings application fails
+        
         return {"message": "Connected successfully"}
     else:
         raise HTTPException(status_code=500, detail="Failed to connect to spectrometer")
@@ -177,9 +255,15 @@ async def set_exposure(
 ):
     """Set exposure and gain settings"""
     try:
-        spectrometer.set_exposure(settings.exposure_ms)
+        # If both exposure and gain are provided, set exposure without saving settings yet
         if settings.gain is not None:
+            # Set exposure first without saving settings
+            spectrometer.set_exposure(settings.exposure_ms, skip_save=True)
+            # Then set gain with saving settings (once for both changes)
             spectrometer.set_gain(settings.gain)
+        else:
+            # Only exposure is being changed, save settings after changing
+            spectrometer.set_exposure(settings.exposure_ms)
         
         return {"message": "Exposure settings updated", "settings": settings}
     except Exception as e:
@@ -193,6 +277,11 @@ async def set_calibration(
     """Set wavelength calibration coefficients"""
     try:
         spectrometer.set_wavelength_calibration(calibration.coefficients)
+        
+        # Set laser wavelength if provided
+        if calibration.laser_wavelength is not None:
+            spectrometer.set_laser_wavelength(calibration.laser_wavelength)
+            
         return {"message": "Calibration updated", "calibration": calibration}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to set calibration: {str(e)}")
@@ -207,14 +296,19 @@ async def set_processing(
         if settings.subtract_dark is not None:
             spectrometer.subtract_dark = settings.subtract_dark
             
-        if settings.use_max is not None:
-            spectrometer.use_max = settings.use_max
+        # Handle readout_mode
+        if settings.readout_mode is not None:
+            spectrometer.set_processing_settings(
+                readout_mode=settings.readout_mode,
+                baseline_correction=None,
+                polynomial_degree=None
+            )
             
         return {
             "message": "Processing settings updated",
             "settings": {
                 "subtract_dark": spectrometer.subtract_dark,
-                "use_max": spectrometer.use_max
+                "readout_mode": "maximum" if spectrometer.use_max else "average"
             }
         }
     except Exception as e:
@@ -232,7 +326,7 @@ async def acquire_dark(spectrometer: Spectrometer = Depends(get_spectrometer)):
 @app.get("/acquire/spectrum", tags=["Acquisition"], response_model=SpectrumResponse)
 async def acquire_spectrum(
     subtract_dark: Optional[bool] = Query(None, description="Whether to subtract dark frame"),
-    use_max: Optional[bool] = Query(None, description="Whether to use maximum instead of mean for spectrum extraction"),
+    readout_mode: Optional[str] = Query(None, description="Readout mode: 'average' or 'maximum'"),
     include_image: Optional[bool] = Query(True, description="Whether to include base64-encoded image data"),
     spectrometer: Spectrometer = Depends(get_spectrometer)
 ):
@@ -244,11 +338,15 @@ async def acquire_spectrum(
         # Acquire raw image data first
         raw_image = spectrometer.acquire_spectrum(return_raw=True)
         
+        # Handle "undefined" string value for subtract_dark
+        if subtract_dark == "undefined":
+            subtract_dark = None
+        
         # Process the spectrum using the raw image
         wavelengths, intensities = spectrometer.process_spectrum(
             raw_image,
             subtract_dark=subtract_dark,
-            use_max=use_max
+            readout_mode=readout_mode
         )
         
         # Convert to lists for JSON serialization
@@ -347,7 +445,7 @@ async def get_roi(spectrometer: Spectrometer = Depends(get_spectrometer)):
 @app.post("/save/spectrum", tags=["Data"])
 async def save_spectrum_data(
     filename: str = Query(..., description="Filename for the spectrum data"),
-    use_max: Optional[bool] = Query(None, description="Whether to use maximum instead of mean for spectrum extraction"),
+    readout_mode: Optional[str] = Query(None, description="Readout mode: 'average' or 'maximum'"),
     spectrometer: Spectrometer = Depends(get_spectrometer)
 ):
     """Acquire and save a spectrum to a CSV file"""
@@ -360,7 +458,7 @@ async def save_spectrum_data(
         filepath = SPECTRA_DIR / clean_filename
         
         # Acquire spectrum
-        wavelengths, intensities = spectrometer.acquire_spectrum(use_max=use_max)
+        wavelengths, intensities = spectrometer.acquire_spectrum(readout_mode=readout_mode)
         
         # Save to file
         spectrometer.save_spectrum(str(filepath), wavelengths, intensities)
@@ -391,12 +489,168 @@ async def list_spectra():
 
 @app.get("/spectra/{filename}", tags=["Data"])
 async def get_spectrum_file(filename: str):
-    """Get a saved spectrum file"""
-    # Sanitize filename
-    clean_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
-    filepath = SPECTRA_DIR / clean_filename
-    
+    """Get a specific spectrum file"""
+    filepath = SPECTRA_DIR / filename
     if not filepath.exists():
         raise HTTPException(status_code=404, detail=f"Spectrum file {filename} not found")
     
-    return FileResponse(str(filepath), filename=clean_filename) 
+    # Clean the filename to be safe
+    clean_filename = os.path.basename(filename)
+    
+    return FileResponse(str(filepath), filename=clean_filename)
+
+@app.post("/api/settings/load-defaults", tags=["Settings"])
+async def load_default_settings(background_tasks: BackgroundTasks):
+    """Load default settings"""
+    global spectrometer
+    
+    if spectrometer is None:
+        sdk_path = os.getenv("ZWO_ASI_LIB")
+        spectrometer = Spectrometer(sdk_path)
+        
+    if not spectrometer.connected:
+        return {"success": False, "error": "Not connected to spectrometer"}
+    
+    # Apply default settings directly without disconnecting
+    try:
+        # Get default settings
+        with open(settings_manager.default_path, 'r') as f:
+            default_settings = json.load(f)
+            
+        # Apply camera settings
+        camera_settings = default_settings.get('camera', {})
+        exposure_ms = camera_settings.get('exposure_ms')
+        gain = camera_settings.get('gain')
+        
+        logger.info(f"Applying default settings from {settings_manager.default_path}")
+        logger.info(f"Default exposure: {exposure_ms}ms, gain: {gain}")
+        
+        # Set exposure and gain
+        if exposure_ms is not None:
+            spectrometer.set_exposure(exposure_ms)
+        if gain is not None:
+            spectrometer.set_gain(gain)
+            
+        # Apply ROI settings
+        roi_settings = camera_settings.get('roi', {})
+        if roi_settings:
+            spectrometer.set_roi(
+                start_x=roi_settings.get('start_x', 0),
+                start_y=roi_settings.get('start_y', 0),
+                width=roi_settings.get('width', None),
+                height=roi_settings.get('height', None),
+                binning=roi_settings.get('binning', 1)
+            )
+            
+        # Apply calibration settings
+        calibration_settings = default_settings.get('calibration', {})
+        if calibration_settings:
+            # Set wavelength calibration coefficients
+            wavelength_coeffs = calibration_settings.get('wavelength_coefficients')
+            if wavelength_coeffs:
+                spectrometer.set_wavelength_calibration(wavelength_coeffs)
+            
+            # Set laser wavelength
+            laser_wavelength = calibration_settings.get('laser_wavelength')
+            if laser_wavelength:
+                spectrometer.set_laser_wavelength(laser_wavelength)
+                
+        # Apply processing settings
+        processing_settings = default_settings.get('processing', {})
+        if processing_settings:
+            # Handle readout_mode
+            readout_mode = processing_settings.get('readout_mode')
+            baseline_correction = processing_settings.get('baseline_correction')
+            polynomial_degree = processing_settings.get('polynomial_degree')
+            
+            spectrometer.set_processing_settings(
+                readout_mode=readout_mode,
+                baseline_correction=baseline_correction,
+                polynomial_degree=polynomial_degree
+            )
+            
+        logger.info("Successfully applied default settings from default_settings.json")
+        return {"success": True, "message": "Default settings loaded successfully"}
+    except Exception as e:
+        logger.error(f"Error applying default settings: {e}")
+        return {"success": False, "error": f"Failed to load default settings: {str(e)}"}
+
+@app.post("/api/settings/save-as-default", tags=["Settings"])
+async def save_as_default_settings(background_tasks: BackgroundTasks):
+    """Save current settings as defaults"""
+    global spectrometer
+    
+    if spectrometer is None or not spectrometer.connected:
+        return {"success": False, "error": "Not connected to spectrometer"}
+    
+    if settings_manager.save_as_default_settings():
+        return {"success": True, "message": "Current settings saved successfully"}
+    else:
+        return {"success": False, "error": "Failed to save current settings"}
+
+@app.get("/api/settings/defaults", tags=["Settings"])
+async def get_default_settings():
+    """Get the default settings without connecting to the spectrometer"""
+    try:
+        # Check if default settings file exists
+        if not os.path.exists(settings_manager.default_path):
+            logger.error(f"Default settings file not found at {settings_manager.default_path}")
+            return {
+                "success": False,
+                "error": "Default settings file not found"
+            }
+            
+        # Load default settings from file
+        with open(settings_manager.default_path, 'r') as f:
+            default_settings = json.load(f)
+        
+        logger.info(f"Default settings loaded successfully (camera.exposure_ms: {default_settings.get('camera', {}).get('exposure_ms')})")
+        
+        return {
+            "success": True,
+            "settings": default_settings
+        }
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing default settings JSON: {str(e)}")
+        return {
+            "success": False, 
+            "error": f"Invalid JSON in default settings file: {str(e)}"
+        }
+    except Exception as e:
+        logger.error(f"Error loading default settings: {str(e)}")
+        return {
+            "success": False, 
+            "error": f"Failed to load default settings: {str(e)}"
+        }
+
+@app.post("/api/settings/display", tags=["Settings"])
+async def set_display_settings(
+    mode: Optional[str] = Body(None, description="Display mode: 'wavelength', 'raman', or 'pixels'")
+):
+    """Set display settings"""
+    try:
+        if mode is not None:
+            # Validate mode
+            if mode not in ['wavelength', 'raman', 'pixels']:
+                return {
+                    "success": False,
+                    "error": f"Invalid display mode: {mode}. Must be 'wavelength', 'raman', or 'pixels'."
+                }
+                
+            # Update the mode in settings
+            settings_manager.update_settings({
+                'mode': mode
+            }, 'display')
+            
+            logger.info(f"Display mode updated to {mode}")
+            
+        return {
+            "success": True,
+            "message": "Display settings updated successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error updating display settings: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to update display settings: {str(e)}"
+        } 

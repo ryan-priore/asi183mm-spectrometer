@@ -63,6 +63,8 @@ def main():
                         help='Enable debug mode')
     parser.add_argument('--sdk-path', type=str, default=None,
                         help='Path to the ASI SDK library file (overrides ZWO_ASI_LIB)')
+    parser.add_argument('--reset-settings', action='store_true',
+                        help='Reset settings to defaults')
     
     args = parser.parse_args()
     
@@ -78,17 +80,36 @@ def main():
     if not check_environment():
         logger.error("Environment check failed. Please fix the issues and try again.")
         return 1
+    
+    # Initialize settings manager
+    logger.info("Initializing settings manager...")
+    from settings_manager import settings_manager
+    
+    # Reset settings if requested
+    if args.reset_settings:
+        logger.info("Resetting settings to defaults...")
+        if settings_manager.reset_to_defaults():
+            logger.info("Settings reset successfully")
+        else:
+            logger.error("Failed to reset settings")
+    
+    # Get server settings
+    server_settings = settings_manager.get_setting('server', {})
+    host = args.host or server_settings.get('host', '0.0.0.0')
+    port = args.port or server_settings.get('port', 8000)
+    debug = args.debug or server_settings.get('debug', False)
         
     # Import the API module here to avoid initializing the camera before environment check
+    logger.info("Initializing API...")
     import api
     
     # Start the API server
-    logger.info(f"Starting ASI183MM Spectrometer API on {args.host}:{args.port}")
+    logger.info(f"Starting ASI183MM Spectrometer API on {host}:{port}")
     uvicorn.run(
         "api:app",
-        host=args.host,
-        port=args.port,
-        reload=args.debug
+        host=host,
+        port=port,
+        reload=debug
     )
     
     return 0

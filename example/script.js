@@ -19,7 +19,7 @@ const appState = {
     ramanShifts: null, // Added for Raman shift values
     plotLayout: null,
     imageData: null,  // Store the image data
-    displayMode: 'wavelength', // 'wavelength' or 'raman'
+    displayMode: 'pixels', // 'wavelength' or 'raman' or 'pixels'
     baselineCorrected: false, // Whether baseline correction has been applied
     originalSpectrum: null, // Store original spectrum for reverting corrections
 };
@@ -46,9 +46,14 @@ const elements = {
     roiHeight: document.getElementById('roi-height'),
     setRoiBtn: document.getElementById('set-roi-btn'),
     
+    // Settings defaults
+    loadDefaultsBtn: document.getElementById('load-defaults-btn'),
+    saveAsDefaultBtn: document.getElementById('save-as-default-btn'),
+    
     // Display mode
     wavelengthModeBtn: document.getElementById('wavelength-mode-btn'),
     ramanModeBtn: document.getElementById('raman-mode-btn'),
+    pixelsModeBtn: document.getElementById('pixels-mode-btn'),
     
     // Axis controls
     xMin: document.getElementById('x-min'),
@@ -63,7 +68,7 @@ const elements = {
     setCalibrationBtn: document.getElementById('set-calibration-btn'),
     
     // Processing settings
-    useMax: document.getElementById('use-max'),
+    readoutMode: document.getElementById('readout-mode'),
     baselineCorrection: document.getElementById('baseline-correction'),
     polynomialDegree: document.getElementById('polynomial-degree'),
     polynomialDegreeGroup: document.getElementById('polynomial-degree-group'),
@@ -106,9 +111,14 @@ function initApp() {
     elements.copyDataBtn.addEventListener('click', copyData);
     elements.clearLogBtn.addEventListener('click', clearLog);
     
+    // Settings defaults buttons
+    elements.loadDefaultsBtn.addEventListener('click', loadDefaultSettings);
+    elements.saveAsDefaultBtn.addEventListener('click', saveAsDefaultSettings);
+    
     // Set up display mode toggle
     elements.wavelengthModeBtn.addEventListener('click', () => setDisplayMode('wavelength'));
     elements.ramanModeBtn.addEventListener('click', () => setDisplayMode('raman'));
+    elements.pixelsModeBtn.addEventListener('click', () => setDisplayMode('pixels'));
     
     // Set up axis controls
     elements.xMin.addEventListener('change', updateAxisRange);
@@ -126,10 +136,6 @@ function initApp() {
     
     // Set up theme toggle
     setupThemeToggle();
-    
-    // Set default values
-    elements.exposureTime.value = 100;
-    elements.gain.value = 0;
     
     // Initialize default Plotly layout
     appState.plotLayout = {
@@ -152,9 +158,6 @@ function initApp() {
         }
     };
     
-    // Initialize default axis ranges
-    resetAxisRange();
-    
     // Initialize empty plot
     Plotly.newPlot('spectrum-plot', [], appState.plotLayout, {
         responsive: true,
@@ -166,6 +169,131 @@ function initApp() {
     // Log initialization
     logMessage('Interface initialized', 'info');
     logMessage('Connect to the spectrometer to begin', 'info');
+}
+
+// Fetch default settings from server without connecting
+// This function is only called when loadDefaultSettings is triggered while not connected
+async function fetchServerDefaultSettings() {
+    try {
+        logMessage('Loading server default settings...', 'info');
+        
+        // Make a special API call to get default settings without connecting
+        const response = await apiRequest('/api/settings/defaults', 'GET');
+        
+        if (response && response.success && response.settings) {
+            const settings = response.settings;
+            logMessage('Default settings loaded from server', 'success');
+            
+            // Update exposure and gain
+            if (settings.camera) {
+                if (settings.camera.exposure_ms !== undefined) {
+                    elements.exposureTime.value = settings.camera.exposure_ms;
+                    console.log('Set exposure to:', settings.camera.exposure_ms);
+                }
+                if (settings.camera.gain !== undefined) {
+                    elements.gain.value = settings.camera.gain;
+                    console.log('Set gain to:', settings.camera.gain);
+                }
+                
+                // Update ROI settings
+                if (settings.camera.roi) {
+                    const roi = settings.camera.roi;
+                    elements.roiStartX.value = roi.start_x || '';
+                    elements.roiStartY.value = roi.start_y || '';
+                    elements.roiWidth.value = roi.width || '';
+                    elements.roiHeight.value = roi.height || '';
+                    
+                    // Update ROI visualization if all values are present
+                    if (roi.start_x !== undefined && roi.start_y !== undefined && 
+                        roi.width !== undefined && roi.height !== undefined) {
+                        updateRoiVisualization({
+                            start_x: roi.start_x,
+                            start_y: roi.start_y,
+                            width: roi.width,
+                            height: roi.height
+                        });
+                    }
+                }
+            }
+            
+            // Update calibration settings
+            if (settings.calibration && settings.calibration.wavelength_coefficients) {
+                const coeffs = settings.calibration.wavelength_coefficients;
+                elements.wavelengthA.value = coeffs[0] !== undefined ? coeffs[0] : '';
+                elements.wavelengthB.value = coeffs[1] !== undefined ? coeffs[1] : '';
+                elements.wavelengthC.value = coeffs[2] !== undefined ? coeffs[2] : '';
+                
+                if (settings.calibration.laser_wavelength) {
+                    elements.laserWavelength.value = settings.calibration.laser_wavelength;
+                    localStorage.setItem('laserWavelength', settings.calibration.laser_wavelength);
+                }
+            }
+            
+            // Update processing settings
+            if (settings.processing) {
+                // Handle readout_mode
+                if (settings.processing.readout_mode !== undefined) {
+                    elements.readoutMode.value = settings.processing.readout_mode;
+                }
+                
+                if (settings.processing.baseline_correction) {
+                    elements.baselineCorrection.value = settings.processing.baseline_correction;
+                    
+                    // Show/hide polynomial degree based on selected method
+                    toggleBaselineCorrectionOptions();
+                    
+                    if (settings.processing.polynomial_degree) {
+                        elements.polynomialDegree.value = settings.processing.polynomial_degree;
+                    }
+                }
+            }
+            
+            // Update display settings and axis range
+            if (settings.display) {
+                // Set display mode if specified
+                if (settings.display.mode) {
+                    setDisplayMode(settings.display.mode);
+                }
+                
+                // Update axis ranges if available
+                if (appState.displayMode === 'wavelength' && settings.display.wavelength_range) {
+                    elements.xMin.value = settings.display.wavelength_range[0];
+                    elements.xMax.value = settings.display.wavelength_range[1];
+                } else if (appState.displayMode === 'raman' && settings.display.raman_range) {
+                    elements.xMin.value = settings.display.raman_range[0];
+                    elements.xMax.value = settings.display.raman_range[1];
+                } else if (appState.displayMode === 'pixels' && settings.display.pixels_range) {
+                    elements.xMin.value = settings.display.pixels_range[0];
+                    elements.xMax.value = settings.display.pixels_range[1];
+                }
+                
+                // If xMin and xMax are set, update plot layout
+                if (elements.xMin.value && elements.xMax.value) {
+                    const xMin = parseFloat(elements.xMin.value);
+                    const xMax = parseFloat(elements.xMax.value);
+                    
+                    if (!isNaN(xMin) && !isNaN(xMax) && xMin < xMax) {
+                        // Update plot layout
+                        const layout = {
+                            xaxis: {
+                                title: appState.displayMode === 'wavelength' ? 'Wavelength (nm)' : 
+                                       appState.displayMode === 'raman' ? 'Raman Shift (cm⁻¹)' : 'Pixels',
+                                range: [xMin, xMax]
+                            }
+                        };
+                        
+                        Plotly.relayout('spectrum-plot', layout);
+                        logMessage(`Axis range set to [${xMin}, ${xMax}]`, 'info');
+                    }
+                }
+            }
+        } else {
+            throw new Error('Invalid response from server');
+        }
+    } catch (error) {
+        logMessage(`Error loading server default settings: ${error.message}. Connect to the device to configure settings.`, 'error');
+        console.error('Could not fetch server default settings:', error);
+    }
 }
 
 // Initialize tab interface
@@ -205,7 +333,7 @@ function toggleBaselineCorrectionOptions() {
     }
 }
 
-// Set display mode (wavelength or Raman shift)
+// Set display mode (wavelength or Raman shift or pixels)
 function setDisplayMode(mode) {
     if (mode === appState.displayMode) return;
     
@@ -215,9 +343,15 @@ function setDisplayMode(mode) {
     if (mode === 'wavelength') {
         elements.wavelengthModeBtn.classList.add('active');
         elements.ramanModeBtn.classList.remove('active');
-    } else {
+        elements.pixelsModeBtn.classList.remove('active');
+    } else if (mode === 'raman') {
         elements.wavelengthModeBtn.classList.remove('active');
         elements.ramanModeBtn.classList.add('active');
+        elements.pixelsModeBtn.classList.remove('active');
+    } else {
+        elements.wavelengthModeBtn.classList.remove('active');
+        elements.ramanModeBtn.classList.remove('active');
+        elements.pixelsModeBtn.classList.add('active');
     }
     
     // Update axis labels and ranges
@@ -228,7 +362,7 @@ function setDisplayMode(mode) {
         drawSpectrum(appState.wavelengths, appState.currentSpectrum);
     }
     
-    logMessage(`Display mode changed to ${mode === 'wavelength' ? 'Wavelength (nm)' : 'Raman Shift (cm⁻¹)'}`, 'info');
+    logMessage(`Display mode changed to ${mode === 'wavelength' ? 'Wavelength (nm)' : mode === 'raman' ? 'Raman Shift (cm⁻¹)' : 'Pixels'}`, 'info');
 }
 
 // Update axis range based on input values
@@ -253,37 +387,98 @@ function updateAxisRange() {
 }
 
 // Reset axis range to default values
-function resetAxisRange() {
-    let xMin, xMax;
-    
-    if (appState.displayMode === 'wavelength') {
-        xMin = 400;
-        xMax = 700;
-        elements.xMin.value = xMin;
-        elements.xMax.value = xMax;
+async function resetAxisRange() {
+    // Only try to get values from server if connected
+    if (!appState.connected) {
+        // Just update the axis title without setting values
+        const layout = {
+            xaxis: {
+                title: appState.displayMode === 'wavelength' ? 'Wavelength (nm)' : appState.displayMode === 'raman' ? 'Raman Shift (cm⁻¹)' : 'Pixels'
+            }
+        };
         
-        // Update plot layout for wavelength
-        appState.plotLayout.xaxis.title = 'Wavelength (nm)';
-    } else {
-        xMin = 0;
-        xMax = 3500;
-        elements.xMin.value = xMin;
-        elements.xMax.value = xMax;
-        
-        // Update plot layout for Raman shift
-        appState.plotLayout.xaxis.title = 'Raman Shift (cm⁻¹)';
+        Plotly.relayout('spectrum-plot', layout);
+        return;
     }
     
-    // Update plot layout
-    const layout = {
-        xaxis: {
-            title: appState.plotLayout.xaxis.title,
-            range: [xMin, xMax]
-        }
-    };
+    let xMin, xMax;
     
-    Plotly.relayout('spectrum-plot', layout);
-    logMessage(`Axis range reset to default values [${xMin}, ${xMax}]`, 'info');
+    try {
+        // Try to get range values from server
+        const response = await apiRequest('/api/settings/defaults', 'GET');
+        
+        if (response && response.success && response.settings && response.settings.display) {
+            if (appState.displayMode === 'wavelength') {
+                if (response.settings.display.wavelength_range && 
+                    response.settings.display.wavelength_range.length === 2) {
+                    [xMin, xMax] = response.settings.display.wavelength_range;
+                }
+                // Update plot layout for wavelength
+                appState.plotLayout.xaxis.title = 'Wavelength (nm)';
+            } else if (appState.displayMode === 'raman') {
+                if (response.settings.display.raman_range && 
+                    response.settings.display.raman_range.length === 2) {
+                    [xMin, xMax] = response.settings.display.raman_range;
+                }
+                // Update plot layout for Raman shift
+                appState.plotLayout.xaxis.title = 'Raman Shift (cm⁻¹)';
+            } else {
+                if (response.settings.display.pixels_range && 
+                    response.settings.display.pixels_range.length === 2) {
+                    [xMin, xMax] = response.settings.display.pixels_range;
+                }
+                // Update plot layout for pixels
+                appState.plotLayout.xaxis.title = 'Pixels';
+            }
+        } else {
+            // If server doesn't provide values, leave fields empty
+            elements.xMin.value = '';
+            elements.xMax.value = '';
+            
+            // Update only the axis title
+            const layout = {
+                xaxis: {
+                    title: appState.displayMode === 'wavelength' ? 'Wavelength (nm)' : appState.displayMode === 'raman' ? 'Raman Shift (cm⁻¹)' : 'Pixels'
+                }
+            };
+            
+            Plotly.relayout('spectrum-plot', layout);
+            logMessage(`Axis title updated`, 'info');
+            return;
+        }
+    } catch (error) {
+        // If there's an error, leave fields empty
+        elements.xMin.value = '';
+        elements.xMax.value = '';
+        
+        // Update only the axis title
+        const layout = {
+            xaxis: {
+                title: appState.displayMode === 'wavelength' ? 'Wavelength (nm)' : appState.displayMode === 'raman' ? 'Raman Shift (cm⁻¹)' : 'Pixels'
+            }
+        };
+        
+        Plotly.relayout('spectrum-plot', layout);
+        logMessage(`Error loading axis range defaults: ${error.message}`, 'warning');
+        return;
+    }
+    
+    // Update input fields if we have valid values
+    if (xMin !== undefined && xMax !== undefined) {
+        elements.xMin.value = xMin;
+        elements.xMax.value = xMax;
+        
+        // Update plot layout
+        const layout = {
+            xaxis: {
+                title: appState.plotLayout.xaxis.title,
+                range: [xMin, xMax]
+            }
+        };
+        
+        Plotly.relayout('spectrum-plot', layout);
+        logMessage(`Axis range reset to [${xMin}, ${xMax}]`, 'info');
+    }
 }
 
 // Calculate Raman shifts from wavelengths
@@ -349,35 +544,29 @@ function applyBaselineCorrection(wavelengths, intensities) {
 
 // Set processing settings
 async function setProcessingSettings() {
-    const useMax = elements.useMax.checked;
-    const baselineMethod = elements.baselineCorrection.value;
-    const polynomialDegree = parseInt(elements.polynomialDegree.value);
+    // Get readout mode from dropdown
+    const readoutMode = elements.readoutMode.value;
+    // Baseline correction is disabled, always use 'none'
+    const baselineMethod = 'none';
     
     try {
-        logMessage(`Setting processing options: Use Max=${useMax}, Baseline=${baselineMethod}`, 'info');
+        logMessage(`Setting processing options: Readout=${readoutMode}`, 'info');
         
         await apiRequest('/processing', 'POST', { 
-            use_max: useMax
+            readout_mode: readoutMode
         });
         
         // Apply baseline correction client-side if we have data
         if (appState.wavelengths && appState.currentSpectrum) {
-            // If we're switching from baseline correction to none, restore original data
-            if (baselineMethod === 'none' && appState.baselineCorrected) {
+            // If the spectrum was previously baseline corrected, restore original data
+            if (appState.baselineCorrected) {
                 appState.currentSpectrum = [...appState.originalSpectrum];
                 appState.baselineCorrected = false;
                 appState.originalSpectrum = null;
-            } 
-            // Otherwise apply the selected correction
-            else if (baselineMethod !== 'none') {
-                appState.currentSpectrum = applyBaselineCorrection(
-                    appState.wavelengths, 
-                    appState.originalSpectrum || appState.currentSpectrum
-                );
+                
+                // Redraw the spectrum with processed data
+                drawSpectrum(appState.wavelengths, appState.currentSpectrum);
             }
-            
-            // Redraw the spectrum with processed data
-            drawSpectrum(appState.wavelengths, appState.currentSpectrum);
         }
         
         logMessage('Processing settings updated successfully', 'success');
@@ -441,30 +630,144 @@ async function connectSpectrometer() {
         }
         
         logMessage('Connected to spectrometer', 'success');
+        logMessage('Default settings from default_settings.json have been applied to the camera', 'info');
         
-        // Get current settings and set ROI to full sensor size
-        await getSpectrumeterSettings();
-        
-        // Try to set ROI to full sensor immediately
+        // Get current settings with cache-busting parameter to ensure fresh data
         try {
-            const statusData = await apiRequest('/status', 'GET');
-            if (statusData && statusData.camera_info && 
-                statusData.camera_info.max_width && statusData.camera_info.max_height) {
+            const statusData = await apiRequest('/status?_nocache=' + new Date().getTime(), 'GET');
+            console.log('Status data:', statusData);
+            
+            if (statusData) {
+                // Store the current exposure and gain values
+                if (statusData.settings) {
+                    // Check for Exposure (capital E) which is in microseconds
+                    if ('Exposure' in statusData.settings) {
+                        // Convert from microseconds to milliseconds
+                        // Server returns Exposure in microseconds (μs), but UI displays in milliseconds (ms)
+                        // Example: Server returns 100000 μs which is 100 ms in the UI
+                        const exposureMs = Math.round(statusData.settings.Exposure / 1000);
+                        elements.exposureTime.value = exposureMs;
+                        console.log('Set exposure from Exposure (μs):', statusData.settings.Exposure, '→', exposureMs, 'ms');
+                    } 
+                    // Also check lowercase version
+                    else if ('exposure_ms' in statusData.settings) {
+                        elements.exposureTime.value = statusData.settings.exposure_ms;
+                        console.log('Set exposure from exposure_ms:', statusData.settings.exposure_ms);
+                    }
+                    
+                    // Check for Gain (capital G)
+                    if ('Gain' in statusData.settings) {
+                        elements.gain.value = statusData.settings.Gain;
+                        console.log('Set gain from Gain:', statusData.settings.Gain);
+                    }
+                    // Also check lowercase version
+                    else if ('gain' in statusData.settings) {
+                        elements.gain.value = statusData.settings.gain;
+                        console.log('Set gain from gain:', statusData.settings.gain);
+                    }
+                    
+                    // Log actual values that were set
+                    logMessage(`Current settings: Exposure=${elements.exposureTime.value}ms, Gain=${elements.gain.value}`, 'info');
+                } else {
+                    logMessage('Warning: No settings data received from server', 'warning');
+                }
                 
-                // Set ROI inputs to full sensor
-                elements.roiStartX.value = 0;
-                elements.roiStartY.value = 0;
-                elements.roiWidth.value = statusData.camera_info.max_width;
-                elements.roiHeight.value = statusData.camera_info.max_height;
+                if (statusData.roi) {
+                    if (statusData.roi.start_x !== undefined) elements.roiStartX.value = statusData.roi.start_x;
+                    if (statusData.roi.start_y !== undefined) elements.roiStartY.value = statusData.roi.start_y;
+                    if (statusData.roi.width !== undefined) elements.roiWidth.value = statusData.roi.width;
+                    if (statusData.roi.height !== undefined) elements.roiHeight.value = statusData.roi.height;
+                    
+                    logMessage(`Current ROI: (${statusData.roi.start_x},${statusData.roi.start_y}) ${statusData.roi.width}x${statusData.roi.height}`, 'info');
+                    
+                    // Update ROI visualization only if all values are valid
+                    if (statusData.roi.start_x !== undefined && statusData.roi.start_y !== undefined &&
+                        statusData.roi.width !== undefined && statusData.roi.height !== undefined) {
+                        updateRoiVisualization(statusData.roi);
+                    }
+                }
                 
-                // Apply ROI settings automatically
-                await setRoi();
+                if (statusData.calibration && statusData.calibration.coefficients) {
+                    const coeffs = statusData.calibration.coefficients;
+                    if (coeffs[0] !== undefined) elements.wavelengthA.value = coeffs[0];
+                    if (coeffs[1] !== undefined) elements.wavelengthB.value = coeffs[1];
+                    if (coeffs.length > 2 && coeffs[2] !== undefined) elements.wavelengthC.value = coeffs[2];
+                    
+                    // Set laser wavelength with priority:
+                    // 1. From server if available
+                    // 2. From localStorage if available
+                    // 3. From default settings if needed
+                    let laserWavelengthSet = false;
+                    
+                    // First check if it's in the server response
+                    if (statusData.calibration.laser_wavelength) {
+                        elements.laserWavelength.value = statusData.calibration.laser_wavelength;
+                        laserWavelengthSet = true;
+                        console.log('Set laser wavelength from server:', statusData.calibration.laser_wavelength);
+                    }
+                    
+                    // Next, try localStorage (only if not already set)
+                    if (!laserWavelengthSet) {
+                        const savedLaserWL = localStorage.getItem('laserWavelength');
+                        if (savedLaserWL && !isNaN(parseFloat(savedLaserWL))) {
+                            elements.laserWavelength.value = parseFloat(savedLaserWL);
+                            laserWavelengthSet = true;
+                            console.log('Set laser wavelength from localStorage:', savedLaserWL);
+                        }
+                    }
+                    
+                    // Finally, if still not set, fetch from default settings
+                    if (!laserWavelengthSet) {
+                        try {
+                            const defaultsResponse = await apiRequest('/api/settings/defaults', 'GET');
+                            if (defaultsResponse && defaultsResponse.success && 
+                                defaultsResponse.settings && 
+                                defaultsResponse.settings.calibration && 
+                                defaultsResponse.settings.calibration.laser_wavelength) {
+                                elements.laserWavelength.value = defaultsResponse.settings.calibration.laser_wavelength;
+                                laserWavelengthSet = true;
+                                console.log('Set laser wavelength from defaults:', defaultsResponse.settings.calibration.laser_wavelength);
+                            }
+                        } catch (err) {
+                            console.error('Could not fetch laser wavelength from defaults:', err);
+                        }
+                    }
+                    
+                    logMessage(`Current calibration: A=${elements.wavelengthA.value}, B=${elements.wavelengthB.value}, C=${elements.wavelengthC.value}, Laser=${elements.laserWavelength.value || 'unknown'}nm`, 'info');
+                }
                 
-                logMessage('ROI set to full sensor automatically', 'success');
+                if (statusData.processing) {
+                    // Update processing settings
+                    if (statusData.processing.readout_mode !== undefined) {
+                        elements.readoutMode.value = statusData.processing.readout_mode;
+                    }
+                    
+                    // Update baseline correction settings if available
+                    if (statusData.processing.baseline_correction) {
+                        elements.baselineCorrection.value = statusData.processing.baseline_correction;
+                        
+                        // Show/hide polynomial degree based on selected method
+                        toggleBaselineCorrectionOptions();
+                        
+                        // Set polynomial degree if available
+                        if (statusData.processing.polynomial_degree) {
+                            elements.polynomialDegree.value = statusData.processing.polynomial_degree;
+                        }
+                    }
+                    
+                    logMessage(`Processing settings: Readout=${elements.readoutMode.value}`, 'info');
+                }
+            } else {
+                logMessage('Connected, but received no settings data from device', 'warning');
             }
         } catch (error) {
-            logMessage(`Could not auto-set ROI: ${error.message}`, 'warning');
+            logMessage(`Connected, but error getting device settings: ${error.message}`, 'warning');
+            console.error('Error fetching status after connection:', error);
         }
+        
+        // Update the axis range display with the values for the current display mode
+        await resetAxisRange();
+        
     } catch (error) {
         elements.connectionStatus.textContent = 'Disconnected';
         elements.connectionStatus.className = 'status disconnected';
@@ -495,16 +798,39 @@ async function disconnectSpectrometer() {
 // Get current spectrometer settings
 async function getSpectrumeterSettings() {
     try {
-        // Get status for all settings
-        const statusData = await apiRequest('/status', 'GET');
+        // Add a cache-busting parameter to ensure we get fresh data
+        const cacheBuster = new Date().getTime();
+        const statusData = await apiRequest(`/status?_nocache=${cacheBuster}`, 'GET');
+        
         if (statusData) {
             // Store the current exposure and gain values just in case
             const currentExposure = elements.exposureTime.value;
             const currentGain = elements.gain.value;
             
             if (statusData.settings) {
-                elements.exposureTime.value = statusData.settings.exposure_ms || currentExposure;
-                elements.gain.value = statusData.settings.gain || currentGain;
+                // Check for Exposure (capital E) which is in microseconds
+                if ('Exposure' in statusData.settings) {
+                    // Convert from microseconds to milliseconds
+                    elements.exposureTime.value = Math.round(statusData.settings.Exposure / 1000);
+                    console.log('Updated exposure from Exposure (μs):', statusData.settings.Exposure, '→', elements.exposureTime.value, 'ms');
+                } 
+                // Also check lowercase version
+                else if ('exposure_ms' in statusData.settings) {
+                    elements.exposureTime.value = statusData.settings.exposure_ms;
+                    console.log('Updated exposure from exposure_ms:', statusData.settings.exposure_ms);
+                }
+                
+                // Check for Gain (capital G)
+                if ('Gain' in statusData.settings) {
+                    elements.gain.value = statusData.settings.Gain;
+                    console.log('Updated gain from Gain:', statusData.settings.Gain);
+                }
+                // Also check lowercase version
+                else if ('gain' in statusData.settings) {
+                    elements.gain.value = statusData.settings.gain;
+                    console.log('Updated gain from gain:', statusData.settings.gain);
+                }
+                
                 logMessage(`Current exposure: ${elements.exposureTime.value}ms, gain: ${elements.gain.value}`, 'info');
             }
             
@@ -552,20 +878,62 @@ async function getSpectrumeterSettings() {
                 elements.wavelengthA.value = coeffs[0] || 0.0;
                 elements.wavelengthB.value = coeffs[1] || 1.0;
                 elements.wavelengthC.value = coeffs.length > 2 ? coeffs[2] : 0.0;
-                logMessage(`Current calibration: A=${elements.wavelengthA.value}, B=${elements.wavelengthB.value}, C=${elements.wavelengthC.value}`, 'info');
+                
+                // Check for laser wavelength in calibration settings
+                if (statusData.calibration.laser_wavelength) {
+                    elements.laserWavelength.value = statusData.calibration.laser_wavelength;
+                    // Also update localStorage for consistency
+                    localStorage.setItem('laserWavelength', statusData.calibration.laser_wavelength);
+                    console.log('Updated laser wavelength from server:', statusData.calibration.laser_wavelength);
+                }
+                
+                logMessage(`Current calibration: A=${elements.wavelengthA.value}, B=${elements.wavelengthB.value}, C=${elements.wavelengthC.value}, Laser=${elements.laserWavelength.value || 'unknown'}nm`, 'info');
             }
             
             if (statusData.processing) {
                 // Update processing settings
-                elements.useMax.checked = statusData.processing.use_max || false;
-                logMessage(`Processing settings: Use Max=${statusData.processing.use_max}`, 'info');
+                if (statusData.processing.readout_mode !== undefined) {
+                    elements.readoutMode.value = statusData.processing.readout_mode;
+                }
+                
+                // Update baseline correction settings if available
+                if (statusData.processing.baseline_correction) {
+                    elements.baselineCorrection.value = statusData.processing.baseline_correction;
+                    
+                    // Show/hide polynomial degree based on selected method
+                    toggleBaselineCorrectionOptions();
+                    
+                    // Set polynomial degree if available
+                    if (statusData.processing.polynomial_degree) {
+                        elements.polynomialDegree.value = statusData.processing.polynomial_degree;
+                    }
+                }
+                
+                logMessage(`Processing settings: Readout=${elements.readoutMode.value}`, 'info');
             }
+        }
+
+        // After getting settings from the server, look for display.mode
+        const defaultsResponse = await apiRequest('/api/settings/defaults', 'GET');
+        if (defaultsResponse && defaultsResponse.success && defaultsResponse.settings) {
+            // If there are any values in the defaults that weren't returned by getSpectrumeterSettings, apply them
+            const defaults = defaultsResponse.settings;
             
-            // Restore saved laser wavelength
-            const savedLaserWL = localStorage.getItem('laserWavelength');
-            if (savedLaserWL) {
-                elements.laserWavelength.value = savedLaserWL;
-                logMessage(`Restored laser wavelength: ${savedLaserWL} nm`, 'info');
+            // Update laser wavelength if available in defaults
+            if (defaults.calibration && defaults.calibration.laser_wavelength) {
+                if (!elements.laserWavelength.value) {
+                    elements.laserWavelength.value = defaults.calibration.laser_wavelength;
+                    logMessage(`Set laser wavelength from defaults: ${defaults.calibration.laser_wavelength}nm`, 'info');
+                }
+            }
+
+            // Set display mode if available
+            if (defaults.display && defaults.display.mode) {
+                setDisplayMode(defaults.display.mode);
+                logMessage(`Set display mode from defaults: ${defaults.display.mode}`, 'info');
+                
+                // Explicitly reset axis range after changing display mode
+                await resetAxisRange();
             }
         }
     } catch (error) {
@@ -593,12 +961,13 @@ async function setExposure() {
 // Set gain
 async function setGain() {
     const gain = parseInt(elements.gain.value);
+    const exposureMs = parseInt(elements.exposureTime.value);
     
     try {
-        logMessage(`Setting gain to ${gain}...`, 'info');
+        logMessage(`Setting gain to ${gain} with exposure ${exposureMs}ms...`, 'info');
         // Use the exposure endpoint to set gain, keeping the current exposure value
         await apiRequest('/exposure', 'POST', { 
-            exposure_ms: parseInt(elements.exposureTime.value),
+            exposure_ms: exposureMs,
             gain: gain
         });
         logMessage(`Gain set to ${gain}`, 'success');
@@ -708,12 +1077,17 @@ async function setCalibration() {
     try {
         logMessage(`Setting calibration coefficients to [${coefficients.join(', ')}]...`, 'info');
         await apiRequest('/calibration', 'POST', { 
-            coefficients: coefficients
+            coefficients: coefficients,
+            laser_wavelength: laserWavelength
         });
-        logMessage(`Calibration set successfully`, 'success');
         
-        // Store the laser wavelength in localStorage
-        localStorage.setItem('laserWavelength', laserWavelength);
+        // Save the laser wavelength to localStorage for persistence
+        if (!isNaN(laserWavelength) && laserWavelength > 0) {
+            localStorage.setItem('laserWavelength', laserWavelength);
+            logMessage(`Laser wavelength (${laserWavelength}nm) saved to server and browser storage`, 'info');
+        }
+        
+        logMessage(`Calibration set successfully`, 'success');
         
         // If we already have spectrum data, recalculate Raman shifts
         if (appState.wavelengths && appState.currentSpectrum) {
@@ -768,8 +1142,14 @@ async function acquireSpectrum() {
             elements.acquisitionStatus.classList.add('active');
         }
         
+        // Get readout mode from dropdown
+        const readoutMode = elements.readoutMode.value;
+        
+        // Build query params without including undefined values
+        let queryParams = `readout_mode=${readoutMode}&include_image=true`;
+        
         // Make the API request to acquire the spectrum
-        const spectrumData = await apiRequest('/acquire/spectrum?include_image=true', 'GET');
+        const spectrumData = await apiRequest('/acquire/spectrum?' + queryParams, 'GET');
         
         // Clear any active countdown
         if (countdownTimer) {
@@ -792,14 +1172,6 @@ async function acquireSpectrum() {
             
             // Display the image automatically
             displayCachedImage();
-        }
-        
-        // Apply baseline correction if selected
-        if (elements.baselineCorrection.value !== 'none') {
-            appState.currentSpectrum = applyBaselineCorrection(
-                appState.wavelengths, 
-                appState.currentSpectrum
-            );
         }
         
         // Draw spectrum
@@ -871,7 +1243,7 @@ function drawSpectrum(wavelengths, intensities) {
     if (appState.displayMode === 'wavelength') {
         xData = wavelengths;
         xAxisTitle = 'Wavelength (nm)';
-    } else {
+    } else if (appState.displayMode === 'raman') {
         if (!appState.ramanShifts) {
             appState.ramanShifts = calculateRamanShifts(wavelengths);
             if (!appState.ramanShifts) {
@@ -881,6 +1253,7 @@ function drawSpectrum(wavelengths, intensities) {
                 appState.displayMode = 'wavelength';
                 elements.wavelengthModeBtn.classList.add('active');
                 elements.ramanModeBtn.classList.remove('active');
+                elements.pixelsModeBtn.classList.remove('active');
             } else {
                 xData = appState.ramanShifts;
                 xAxisTitle = 'Raman Shift (cm⁻¹)';
@@ -889,6 +1262,10 @@ function drawSpectrum(wavelengths, intensities) {
             xData = appState.ramanShifts;
             xAxisTitle = 'Raman Shift (cm⁻¹)';
         }
+    } else {
+        // Pixels mode - create an array of pixel indices (0, 1, 2, ...)
+        xData = Array.from({ length: intensities.length }, (_, i) => i);
+        xAxisTitle = 'Pixels';
     }
     
     // Update plot layout with current axis title
@@ -933,10 +1310,15 @@ function saveSpectrum() {
             for (let i = 0; i < appState.wavelengths.length; i++) {
                 csvContent += `${appState.wavelengths[i]},${appState.currentSpectrum[i]}\n`;
             }
-        } else {
+        } else if (appState.displayMode === 'raman') {
             csvContent = 'Raman Shift (cm⁻¹),Intensity\n';
             for (let i = 0; i < appState.ramanShifts.length; i++) {
                 csvContent += `${appState.ramanShifts[i]},${appState.currentSpectrum[i]}\n`;
+            }
+        } else {
+            csvContent = 'Pixel,Intensity\n';
+            for (let i = 0; i < appState.currentSpectrum.length; i++) {
+                csvContent += `${i},${appState.currentSpectrum[i]}\n`;
             }
         }
         
@@ -979,10 +1361,15 @@ function copyData() {
             for (let i = 0; i < appState.wavelengths.length; i++) {
                 csvContent += `${appState.wavelengths[i]},${appState.currentSpectrum[i]}\n`;
             }
-        } else {
+        } else if (appState.displayMode === 'raman') {
             csvContent = 'Raman Shift (cm⁻¹),Intensity\n';
             for (let i = 0; i < appState.ramanShifts.length; i++) {
                 csvContent += `${appState.ramanShifts[i]},${appState.currentSpectrum[i]}\n`;
+            }
+        } else {
+            csvContent = 'Pixel,Intensity\n';
+            for (let i = 0; i < appState.currentSpectrum.length; i++) {
+                csvContent += `${i},${appState.currentSpectrum[i]}\n`;
             }
         }
         
@@ -1069,20 +1456,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize the application
     initApp();
     
-    // Initialize ROI visualization with default values
-    const defaultRoi = {
-        start_x: parseInt(elements.roiStartX.value) || 0,
-        start_y: parseInt(elements.roiStartY.value) || 0,
-        width: parseInt(elements.roiWidth.value) || 5496,
-        height: parseInt(elements.roiHeight.value) || 3672
-    };
+    // Disable baseline correction functionality while keeping the UI elements
+    elements.baselineCorrection.disabled = true;
+    elements.polynomialDegree.disabled = true;
+    elements.baselineCorrection.value = 'none';
+    elements.polynomialDegreeGroup.style.display = 'none';
     
     // Initialize baseline correction dropdown handler
     toggleBaselineCorrectionOptions();
     elements.baselineCorrection.addEventListener('change', toggleBaselineCorrectionOptions);
-    
-    // Draw initial ROI visualization
-    setTimeout(() => updateRoiVisualization(defaultRoi), 500);
 });
 
 // Theme toggle functionality
@@ -1156,8 +1538,11 @@ function updatePlotlyTheme() {
         let xData;
         if (appState.displayMode === 'wavelength') {
             xData = appState.wavelengths;
-        } else {
+        } else if (appState.displayMode === 'raman') {
             xData = appState.ramanShifts || appState.wavelengths;
+        } else {
+            // Pixels mode - create an array of pixel indices
+            xData = Array.from({ length: appState.currentSpectrum.length }, (_, i) => i);
         }
         
         // Determine line color based on theme
@@ -1201,4 +1586,96 @@ function updatePlotlyTheme() {
             displaylogo: false
         });
     }
-} 
+}
+
+// Load default settings from server
+async function loadDefaultSettings() {
+    try {
+        logMessage('Loading default settings...', 'info');
+        
+        // Check if we're connected
+        if (!appState.connected) {
+            logMessage('Not connected to spectrometer. Showing default values from server (read-only).', 'warning');
+            // Just fetch and display the defaults without trying to apply to device
+            await fetchServerDefaultSettings();
+            return;
+        }
+        
+        // Call API to load default settings
+        const response = await apiRequest('/api/settings/load-defaults', 'POST');
+        
+        if (response && response.success) {
+            logMessage('Default settings loaded successfully', 'success');
+            
+            // Add a small delay to ensure the server has applied all settings
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Refresh the UI with current settings without disconnecting
+            await getSpectrumeterSettings();
+            
+            // Explicitly fetch default settings to pull additional values that might not be in the status
+            try {
+                const defaultsResponse = await apiRequest('/api/settings/defaults', 'GET');
+                if (defaultsResponse && defaultsResponse.success && defaultsResponse.settings) {
+                    // If there are any values in the defaults that weren't returned by getSpectrumeterSettings, apply them
+                    const defaults = defaultsResponse.settings;
+                    
+                    // Update laser wavelength if available in defaults
+                    if (defaults.calibration && defaults.calibration.laser_wavelength) {
+                        if (!elements.laserWavelength.value) {
+                            elements.laserWavelength.value = defaults.calibration.laser_wavelength;
+                            logMessage(`Set laser wavelength from defaults: ${defaults.calibration.laser_wavelength}nm`, 'info');
+                        }
+                    }
+                    
+                    // Set display mode if available
+                    if (defaults.display && defaults.display.mode) {
+                        setDisplayMode(defaults.display.mode);
+                        logMessage(`Set display mode from defaults: ${defaults.display.mode}`, 'info');
+                        
+                        // Explicitly reset axis range after changing display mode
+                        await resetAxisRange();
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching additional default settings:', err);
+            }
+        } else {
+            logMessage(`Failed to load default settings: ${response?.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        logMessage(`Error loading default settings: ${error.message}`, 'error');
+    }
+}
+
+// Save current settings as defaults
+async function saveAsDefaultSettings() {
+    try {
+        logMessage('Saving current settings as defaults...', 'info');
+        
+        // First, update the display mode in the server settings
+        try {
+            const displayResponse = await apiRequest('/api/settings/display', 'POST', {
+                mode: appState.displayMode
+            });
+            
+            if (displayResponse && displayResponse.success) {
+                logMessage(`Display mode '${appState.displayMode}' updated on server`, 'info');
+            }
+        } catch (displayError) {
+            logMessage(`Warning: Could not update display mode: ${displayError.message}`, 'warning');
+            // Continue with saving defaults even if display mode update fails
+        }
+        
+        // Call API to save current settings as defaults
+        const saveResponse = await apiRequest('/api/settings/save-as-default', 'POST');
+        
+        if (saveResponse && saveResponse.success) {
+            logMessage('Settings saved as defaults successfully', 'success');
+        } else {
+            logMessage(`Failed to save settings as defaults: ${saveResponse?.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        logMessage(`Error saving settings as defaults: ${error.message}`, 'error');
+    }
+}
