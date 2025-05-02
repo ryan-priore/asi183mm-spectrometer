@@ -40,7 +40,6 @@ const elements = {
     roiStartY: document.getElementById('roi-start-y'),
     roiWidth: document.getElementById('roi-width'),
     roiHeight: document.getElementById('roi-height'),
-    roiBinning: document.getElementById('roi-binning'),
     setRoiBtn: document.getElementById('set-roi-btn'),
     
     // Calibration
@@ -51,6 +50,7 @@ const elements = {
     
     // Acquisition
     acquireSpectrumBtn: document.getElementById('acquire-spectrum-btn'),
+    acquisitionStatus: document.getElementById('acquisition-status'),
     
     // Spectrum display
     spectrumPlot: document.getElementById('spectrum-plot'),
@@ -61,6 +61,10 @@ const elements = {
     
     // Image display
     cameraImage: document.getElementById('camera-image'),
+    
+    // ROI visualization
+    roiCanvas: document.getElementById('roi-canvas'),
+    roiDimensions: document.getElementById('roi-dimensions'),
     
     // Log
     logContainer: document.getElementById('log-container'),
@@ -244,7 +248,6 @@ async function connectSpectrometer() {
                 elements.roiStartY.value = 0;
                 elements.roiWidth.value = statusData.camera_info.max_width;
                 elements.roiHeight.value = statusData.camera_info.max_height;
-                elements.roiBinning.value = 1;
                 
                 // Apply ROI settings automatically
                 await setRoi();
@@ -297,13 +300,17 @@ async function getSpectrumeterSettings() {
                 logMessage(`Current exposure: ${elements.exposureTime.value}ms, gain: ${elements.gain.value}`, 'info');
             }
             
+            let roiUpdated = false;
             if (statusData.roi) {
                 elements.roiStartX.value = statusData.roi.start_x;
                 elements.roiStartY.value = statusData.roi.start_y;
                 elements.roiWidth.value = statusData.roi.width;
                 elements.roiHeight.value = statusData.roi.height;
-                elements.roiBinning.value = statusData.roi.binning;
-                logMessage(`Current ROI: (${statusData.roi.start_x},${statusData.roi.start_y}) ${statusData.roi.width}x${statusData.roi.height}, binning: ${statusData.roi.binning}`, 'info');
+                logMessage(`Current ROI: (${statusData.roi.start_x},${statusData.roi.start_y}) ${statusData.roi.width}x${statusData.roi.height}`, 'info');
+                
+                // Update ROI visualization
+                updateRoiVisualization(statusData.roi);
+                roiUpdated = true;
             }
             
             if (statusData.camera_info) {
@@ -319,6 +326,16 @@ async function getSpectrumeterSettings() {
                     }
                     
                     logMessage(`Set ROI to full sensor size: ${elements.roiWidth.value}x${elements.roiHeight.value}`, 'info');
+                    
+                    // Update ROI visualization if not already updated
+                    if (!roiUpdated) {
+                        updateRoiVisualization({
+                            start_x: parseInt(elements.roiStartX.value) || 0,
+                            start_y: parseInt(elements.roiStartY.value) || 0,
+                            width: parseInt(elements.roiWidth.value),
+                            height: parseInt(elements.roiHeight.value)
+                        });
+                    }
                 }
             }
             
@@ -381,16 +398,84 @@ async function setRoi() {
         start_x: parseInt(elements.roiStartX.value),
         start_y: parseInt(elements.roiStartY.value),
         width: parseInt(elements.roiWidth.value),
-        height: parseInt(elements.roiHeight.value),
-        binning: parseInt(elements.roiBinning.value)
+        height: parseInt(elements.roiHeight.value)
     };
     
     try {
-        logMessage(`Setting ROI to (${roi.start_x},${roi.start_y}) ${roi.width}x${roi.height}, binning: ${roi.binning}...`, 'info');
+        logMessage(`Setting ROI to (${roi.start_x},${roi.start_y}) ${roi.width}x${roi.height}...`, 'info');
         await apiRequest('/roi', 'POST', roi);
         logMessage(`ROI set successfully`, 'success');
+        
+        // Update the ROI visualization
+        updateRoiVisualization(roi);
     } catch (error) {
         logMessage(`Error setting ROI: ${error.message}`, 'error');
+    }
+}
+
+// Function to draw ROI visualization
+function updateRoiVisualization(roi) {
+    const canvas = elements.roiCanvas;
+    if (!canvas) {
+        console.error('ROI canvas element not found');
+        return;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Sensor dimensions
+    const sensorWidth = 5496;
+    const sensorHeight = 3672;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Calculate scale to fit sensor in canvas
+    // We'll keep the aspect ratio of the sensor
+    const sensorAspect = sensorWidth / sensorHeight;
+    const canvasAspect = width / height;
+    
+    let drawWidth, drawHeight;
+    if (sensorAspect > canvasAspect) {
+        // Sensor is wider than canvas (relative to height)
+        drawWidth = width;
+        drawHeight = width / sensorAspect;
+    } else {
+        // Sensor is taller than canvas (relative to width)
+        drawHeight = height;
+        drawWidth = height * sensorAspect;
+    }
+    
+    // Center the sensor rectangle in the canvas
+    const offsetX = (width - drawWidth) / 2;
+    const offsetY = (height - drawHeight) / 2;
+    
+    // Draw sensor outline
+    ctx.strokeStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#666' : '#888';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(offsetX, offsetY, drawWidth, drawHeight);
+    
+    // Calculate ROI position and size in canvas coordinates
+    const roiX = offsetX + (roi.start_x / sensorWidth) * drawWidth;
+    const roiY = offsetY + (roi.start_y / sensorHeight) * drawHeight;
+    const roiWidth = (roi.width / sensorWidth) * drawWidth;
+    const roiHeight = (roi.height / sensorHeight) * drawHeight;
+    
+    // Draw ROI rectangle
+    ctx.strokeStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#00b4ff' : '#3498db';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(roiX, roiY, roiWidth, roiHeight);
+    
+    // Fill ROI with translucent color
+    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? 
+        'rgba(0, 180, 255, 0.15)' : 'rgba(52, 152, 219, 0.15)';
+    ctx.fillRect(roiX, roiY, roiWidth, roiHeight);
+    
+    // Update ROI dimensions text
+    if (elements.roiDimensions) {
+        elements.roiDimensions.textContent = `Current ROI: ${roi.width} × ${roi.height} pixels`;
     }
 }
 
@@ -417,8 +502,49 @@ async function setCalibration() {
 // Acquire spectrum
 async function acquireSpectrum() {
     try {
+        // Get the exposure time to determine if we need a countdown
+        const exposureTime = parseInt(elements.exposureTime.value, 10);
+        const needsCountdown = exposureTime >= 1000;
+        
+        // Disable the acquire button during acquisition
+        elements.acquireSpectrumBtn.disabled = true;
+        
+        // Show acquisition in progress
         logMessage('Acquiring spectrum...', 'info');
+        
+        // Set up countdown timer if needed
+        let countdownTimer;
+        let remainingTime = Math.ceil(exposureTime / 1000);
+        
+        if (needsCountdown) {
+            // Initial status update
+            elements.acquisitionStatus.textContent = `Acquiring... ${remainingTime}s`;
+            elements.acquisitionStatus.classList.add('active', 'countdown');
+            
+            // Start countdown timer
+            countdownTimer = setInterval(() => {
+                remainingTime--;
+                if (remainingTime <= 0) {
+                    // Clear timer if we reach zero
+                    clearInterval(countdownTimer);
+                    elements.acquisitionStatus.textContent = 'Processing...';
+                } else {
+                    elements.acquisitionStatus.textContent = `Acquiring... ${remainingTime}s`;
+                }
+            }, 1000);
+        } else {
+            // For short exposures, just show "Acquiring..."
+            elements.acquisitionStatus.textContent = 'Acquiring...';
+            elements.acquisitionStatus.classList.add('active');
+        }
+        
+        // Make the API request to acquire the spectrum
         const spectrumData = await apiRequest('/acquire/spectrum?include_image=true', 'GET');
+        
+        // Clear any active countdown
+        if (countdownTimer) {
+            clearInterval(countdownTimer);
+        }
         
         // Store the spectrum data and update display
         appState.wavelengths = spectrumData.wavelengths;
@@ -440,8 +566,31 @@ async function acquireSpectrum() {
         elements.saveSpectrumBtn.disabled = false;
         elements.copyDataBtn.disabled = false;
         
+        // Clear the status indicator after a brief delay
+        setTimeout(() => {
+            elements.acquisitionStatus.textContent = 'Complete';
+            
+            // Fade out the status indicator after another brief delay
+            setTimeout(() => {
+                elements.acquisitionStatus.classList.remove('active', 'countdown');
+                // Re-enable the acquire button
+                elements.acquireSpectrumBtn.disabled = false;
+            }, 1000);
+        }, 500);
+        
         logMessage('Spectrum acquired successfully', 'success');
     } catch (error) {
+        // Clear the status indicator on error
+        elements.acquisitionStatus.textContent = 'Error';
+        elements.acquisitionStatus.classList.add('active');
+        
+        // Fade out the status indicator after a delay
+        setTimeout(() => {
+            elements.acquisitionStatus.classList.remove('active', 'countdown');
+            // Re-enable the acquire button
+            elements.acquireSpectrumBtn.disabled = false;
+        }, 2000);
+        
         logMessage(`Error acquiring spectrum: ${error.message}`, 'error');
     }
 }
@@ -566,6 +715,12 @@ function toggleUIElements(connected) {
     safeToggle(elements.setProcessingBtn, !connected);
     safeToggle(elements.acquireSpectrumBtn, !connected);
     
+    // Reset acquisition status when disconnecting
+    if (!connected && elements.acquisitionStatus) {
+        elements.acquisitionStatus.textContent = '';
+        elements.acquisitionStatus.classList.remove('active', 'countdown');
+    }
+    
     // Keep these disabled unless we have spectrum data
     const hasSpectrum = appState.wavelengths && appState.currentSpectrum;
     safeToggle(elements.saveSpectrumBtn, !connected || !hasSpectrum);
@@ -605,6 +760,17 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize the application
     initApp();
+    
+    // Initialize ROI visualization with default values
+    const defaultRoi = {
+        start_x: parseInt(elements.roiStartX.value) || 0,
+        start_y: parseInt(elements.roiStartY.value) || 0,
+        width: parseInt(elements.roiWidth.value) || 5496,
+        height: parseInt(elements.roiHeight.value) || 3672
+    };
+    
+    // Draw initial ROI visualization
+    setTimeout(() => updateRoiVisualization(defaultRoi), 500);
 });
 
 // Theme toggle functionality
@@ -638,6 +804,15 @@ function setupThemeToggle() {
             
             // Update Plotly theme
             updatePlotlyTheme();
+            
+            // Update ROI visualization with current values
+            const roi = {
+                start_x: parseInt(elements.roiStartX.value) || 0,
+                start_y: parseInt(elements.roiStartY.value) || 0,
+                width: parseInt(elements.roiWidth.value) || 5496,
+                height: parseInt(elements.roiHeight.value) || 3672
+            };
+            updateRoiVisualization(roi);
         } else {
             document.documentElement.setAttribute('data-theme', 'dark');
             localStorage.setItem('theme', 'dark');
@@ -646,6 +821,15 @@ function setupThemeToggle() {
             
             // Update Plotly theme
             updatePlotlyTheme();
+            
+            // Update ROI visualization with current values
+            const roi = {
+                start_x: parseInt(elements.roiStartX.value) || 0,
+                start_y: parseInt(elements.roiStartY.value) || 0,
+                width: parseInt(elements.roiWidth.value) || 5496,
+                height: parseInt(elements.roiHeight.value) || 3672
+            };
+            updateRoiVisualization(roi);
         }
     });
 }

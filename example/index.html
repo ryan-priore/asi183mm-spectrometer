@@ -28,6 +28,7 @@
                 <div class="acquisition-buttons">
                     <div class="left-buttons">
                         <button id="acquire-spectrum-btn" class="primary-btn" disabled title="Acquire a new spectrum from the spectrometer">Acquire Spectrum</button>
+                        <span id="acquisition-status" class="status-indicator" title="Shows the status of the current acquisition process"></span>
                     </div>
                     <div class="right-buttons">
                         <button id="save-spectrum-btn" class="secondary-btn" disabled title="Save the current spectrum data as a CSV file">Save Spectrum</button>
@@ -69,38 +70,44 @@
                         </div>
                         
                         <div class="tab-pane" id="roi-tab">
-                            <div class="settings-group">
-                                <div class="form-group">
-                                    <label for="roi-start-x">Start X:</label>
-                                    <input type="number" id="roi-start-x" min="0" value="0" title="Starting X position of the ROI in pixels">
+                            <div class="roi-container">
+                                <div class="roi-settings">
+                                    <div class="settings-group">
+                                        <div class="form-group">
+                                            <label for="roi-start-x">Start X:</label>
+                                            <input type="number" id="roi-start-x" min="0" value="0" title="Starting X position of the ROI in pixels">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="roi-start-y">Start Y:</label>
+                                            <input type="number" id="roi-start-y" min="0" value="0" title="Starting Y position of the ROI in pixels">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="roi-width">Width:</label>
+                                            <input type="number" id="roi-width" min="1" value="5496" title="Width of the ROI in pixels">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="roi-height">Height:</label>
+                                            <input type="number" id="roi-height" min="1" value="3672" title="Height of the ROI in pixels">
+                                        </div>
+                                        
+                                        <button id="set-roi-btn" class="secondary-btn" disabled title="Apply the ROI settings">Set ROI</button>
+                                    </div>
                                 </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-start-y">Start Y:</label>
-                                    <input type="number" id="roi-start-y" min="0" value="0" title="Starting Y position of the ROI in pixels">
+                                <div class="roi-visualization">
+                                    <div class="visualization-container">
+                                        <h3>ROI Visualization</h3>
+                                        <div class="canvas-container">
+                                            <canvas id="roi-canvas" width="300" height="200"></canvas>
+                                        </div>
+                                        <div class="canvas-info">
+                                            <span>Full sensor: 5496 × 3672 pixels</span>
+                                            <span id="roi-dimensions"></span>
+                                        </div>
+                                    </div>
                                 </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-width">Width:</label>
-                                    <input type="number" id="roi-width" min="1" value="5496" title="Width of the ROI in pixels">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-height">Height:</label>
-                                    <input type="number" id="roi-height" min="1" value="3672" title="Height of the ROI in pixels">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-binning">Binning:</label>
-                                    <select id="roi-binning" title="Pixel binning factor">
-                                        <option value="1">1x1</option>
-                                        <option value="2">2x2</option>
-                                        <option value="3">3x3</option>
-                                        <option value="4">4x4</option>
-                                    </select>
-                                </div>
-                                
-                                <button id="set-roi-btn" class="secondary-btn" disabled title="Apply the ROI settings">Set ROI</button>
                             </div>
                         </div>
                         

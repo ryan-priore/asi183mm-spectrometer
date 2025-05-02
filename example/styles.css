@@ -731,4 +731,121 @@ input[type="checkbox"] {
 
 [data-theme="dark"] .panels-row {
     gap: 15px;
-} */ 
+} */
+
+.status-indicator {
+    display: inline-block;
+    margin-left: 10px;
+    font-size: 14px;
+    color: var(--text-color);
+    font-weight: 500;
+    transition: opacity 0.3s ease;
+    opacity: 0;
+}
+
+.status-indicator.active {
+    opacity: 1;
+}
+
+.status-indicator.countdown {
+    color: var(--accent-color);
+}
+
+/* Ensure consistent font size in dark mode */
+[data-theme="dark"] .status-indicator {
+    font-size: 14px;
+}
+
+/* Make sure the indicator has sufficient space on mobile */
+@media (max-width: 768px) {
+    .status-indicator {
+        display: block;
+        margin-left: 0;
+        margin-top: 5px;
+        text-align: center;
+    }
+}
+
+/* ROI Visualization Styles */
+.roi-container {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+}
+
+.roi-settings {
+    flex: 1;
+    min-width: 280px;
+}
+
+.roi-visualization {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 20px;
+}
+
+.visualization-container {
+    width: 100%;
+    max-width: 320px;
+    background-color: var(--panel-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .visualization-container {
+    background-color: #232323;
+    border-color: #444;
+}
+
+.canvas-container {
+    width: 100%;
+    margin: 10px 0;
+    display: flex;
+    justify-content: center;
+}
+
+#roi-canvas {
+    border: 1px solid var(--border-color);
+    background-color: var(--plot-bg-color);
+}
+
+[data-theme="dark"] #roi-canvas {
+    border-color: #444;
+    background-color: #1a1a1a;
+}
+
+.canvas-info {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    color: var(--text-color);
+    margin-top: 10px;
+    text-align: center;
+}
+
+.canvas-info span {
+    margin-bottom: 5px;
+}
+
+[data-theme="dark"] .canvas-info {
+    color: #ccc;
+}
+
+/* Make the ROI visualization responsive */
+@media (max-width: 768px) {
+    .roi-container {
+        flex-direction: column;
+    }
+    
+    .roi-visualization {
+        padding-top: 0;
+    }
+    
+    .visualization-container {
+        max-width: 100%;
+    }
+} 
