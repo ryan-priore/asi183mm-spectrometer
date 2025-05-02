@@ -28,6 +28,7 @@
                 <div class="acquisition-buttons">
                     <div class="left-buttons">
                         <button id="acquire-spectrum-btn" class="primary-btn" disabled title="Acquire a new spectrum from the spectrometer">Acquire Spectrum</button>
+                        <span id="acquisition-status" class="status-indicator" title="Shows the status of the current acquisition process"></span>
                     </div>
                     <div class="right-buttons">
                         <button id="save-spectrum-btn" class="secondary-btn" disabled title="Save the current spectrum data as a CSV file">Save Spectrum</button>
@@ -38,11 +39,40 @@
                 <div class="spectrum-container">
                     <div id="spectrum-plot" style="width:100%; height:100%;"></div>
                 </div>
+                
+                <div class="spectrum-controls">
+                    <div class="display-mode-toggle">
+                        <span>Display: </span>
+                        <div class="btn-group">
+                            <button id="raman-mode-btn" class="mode-btn" title="Display spectrum in Raman shift (cm⁻¹)">Raman Shift</button>
+                            <button id="wavelength-mode-btn" class="mode-btn" title="Display spectrum in wavelength (nm)">Wavelength</button>
+                            <button id="pixels-mode-btn" class="mode-btn active" title="Display spectrum with pixel positions on x-axis">Pixels</button>
+                        </div>
+                    </div>
+                    
+                    <div class="axis-controls">
+                        <div class="axis-input">
+                            <label for="x-min">X Min:</label>
+                            <input type="number" id="x-min" class="axis-value" title="Minimum value for x-axis">
+                        </div>
+                        <div class="axis-input">
+                            <label for="x-max">X Max:</label>
+                            <input type="number" id="x-max" class="axis-value" title="Maximum value for x-axis">
+                        </div>
+                        <button id="reset-axis-btn" class="small-btn" title="Reset axis to auto range">Reset</button>
+                    </div>
+                </div>
             </div>
             
             <div class="panels-row">
                 <div class="settings-panel">
-                    <h2>Settings</h2>
+                    <div class="settings-header">
+                        <h2>Settings</h2>
+                        <div class="settings-header-buttons">
+                            <button id="load-defaults-btn" class="secondary-btn" title="Load default settings from server">Load Defaults</button>
+                            <button id="save-as-default-btn" class="secondary-btn" title="Save current settings as default">Save as Defaults</button>
+                        </div>
+                    </div>
                     
                     <div class="settings-tabs">
                         <button class="tab-btn active" data-tab="camera" title="Camera exposure and gain settings">Camera</button>
@@ -56,69 +86,80 @@
                             <div class="settings-group">
                                 <div class="form-group">
                                     <label for="exposure-time">Exposure Time (ms):</label>
-                                    <input type="number" id="exposure-time" min="1" max="600000" value="100" title="Exposure time in milliseconds (1-600000)">
+                                    <input type="number" id="exposure-time" min="1" max="600000" title="Exposure time in milliseconds (1-600000)">
                                     <button id="set-exposure-btn" class="secondary-btn" disabled title="Apply the exposure time setting">Set</button>
                                 </div>
                                 
                                 <div class="form-group">
                                     <label for="gain">Gain:</label>
-                                    <input type="number" id="gain" min="0" max="500" value="0" title="Camera gain value (0-500)">
+                                    <input type="number" id="gain" min="0" max="500" title="Camera gain value (0-500)">
                                     <button id="set-gain-btn" class="secondary-btn" disabled title="Apply the gain setting">Set</button>
                                 </div>
                             </div>
                         </div>
                         
                         <div class="tab-pane" id="roi-tab">
-                            <div class="settings-group">
-                                <div class="form-group">
-                                    <label for="roi-start-x">Start X:</label>
-                                    <input type="number" id="roi-start-x" min="0" value="0" title="Starting X position of the ROI in pixels">
+                            <div class="roi-container">
+                                <div class="roi-settings">
+                                    <div class="settings-group">
+                                        <div class="form-group">
+                                            <label for="roi-start-x">Start X:</label>
+                                            <input type="number" id="roi-start-x" min="0" title="Starting X position of the ROI in pixels">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="roi-start-y">Start Y:</label>
+                                            <input type="number" id="roi-start-y" min="0" title="Starting Y position of the ROI in pixels">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="roi-width">Width:</label>
+                                            <input type="number" id="roi-width" min="1" title="Width of the ROI in pixels">
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="roi-height">Height:</label>
+                                            <input type="number" id="roi-height" min="1" title="Height of the ROI in pixels">
+                                        </div>
+                                        
+                                        <button id="set-roi-btn" class="secondary-btn" disabled title="Apply the ROI settings">Set ROI</button>
+                                    </div>
                                 </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-start-y">Start Y:</label>
-                                    <input type="number" id="roi-start-y" min="0" value="0" title="Starting Y position of the ROI in pixels">
+                                <div class="roi-visualization">
+                                    <div class="visualization-container">
+                                        <h3>ROI Visualization</h3>
+                                        <div class="canvas-container">
+                                            <canvas id="roi-canvas" width="300" height="200"></canvas>
+                                        </div>
+                                        <div class="canvas-info">
+                                            <span>Full sensor: 5496 × 3672 pixels</span>
+                                            <span id="roi-dimensions"></span>
+                                        </div>
+                                    </div>
                                 </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-width">Width:</label>
-                                    <input type="number" id="roi-width" min="1" value="5496" title="Width of the ROI in pixels">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-height">Height:</label>
-                                    <input type="number" id="roi-height" min="1" value="3672" title="Height of the ROI in pixels">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="roi-binning">Binning:</label>
-                                    <select id="roi-binning" title="Pixel binning factor">
-                                        <option value="1">1x1</option>
-                                        <option value="2">2x2</option>
-                                        <option value="3">3x3</option>
-                                        <option value="4">4x4</option>
-                                    </select>
-                                </div>
-                                
-                                <button id="set-roi-btn" class="secondary-btn" disabled title="Apply the ROI settings">Set ROI</button>
                             </div>
                         </div>
                         
                         <div class="tab-pane" id="calibration-tab">
                             <div class="settings-group">
                                 <div class="form-group">
+                                    <label for="laser-wavelength">Laser Wavelength (nm):</label>
+                                    <input type="number" id="laser-wavelength" step="0.1" min="200" max="1100" title="Excitation laser wavelength used for Raman shift calculation">
+                                </div>
+                                
+                                <div class="form-group">
                                     <label for="wavelength-a">Coefficient A:</label>
-                                    <input type="number" id="wavelength-a" step="0.0001" value="0" title="Wavelength calibration coefficient A (quadratic term)">
+                                    <input type="number" id="wavelength-a" step="0.0001" title="Wavelength calibration coefficient A (quadratic term)">
                                 </div>
                                 
                                 <div class="form-group">
                                     <label for="wavelength-b">Coefficient B:</label>
-                                    <input type="number" id="wavelength-b" step="0.0001" value="1" title="Wavelength calibration coefficient B (linear term)">
+                                    <input type="number" id="wavelength-b" step="0.0001" title="Wavelength calibration coefficient B (linear term)">
                                 </div>
                                 
                                 <div class="form-group">
                                     <label for="wavelength-c">Coefficient C:</label>
-                                    <input type="number" id="wavelength-c" step="0.0001" value="0" title="Wavelength calibration coefficient C (constant term)">
+                                    <input type="number" id="wavelength-c" step="0.0001" title="Wavelength calibration coefficient C (constant term)">
                                 </div>
                                 
                                 <button id="set-calibration-btn" class="secondary-btn" disabled title="Apply the wavelength calibration coefficients">Set Calibration</button>
@@ -128,9 +169,25 @@
                         <div class="tab-pane" id="processing-tab">
                             <div class="settings-group">
                                 <div class="form-group">
-                                    <label for="use-max">Use Maximum:</label>
-                                    <input type="checkbox" id="use-max" title="When checked, uses the maximum value along each column instead of the mean">
-                                    <span class="tooltip" title="When checked, uses the maximum value along each column instead of the mean">?</span>
+                                    <label for="readout-mode">Readout:</label>
+                                    <select id="readout-mode" title="'Average' uses the mean value along each column, 'Maximum' uses the maximum value">
+                                        <option value="average">Average</option>
+                                        <option value="maximum">Maximum</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="baseline-correction">Baseline Correction:</label>
+                                    <select id="baseline-correction" title="Method for removing baseline from spectrum">
+                                        <option value="none">None</option>
+                                        <option value="linear">Linear</option>
+                                        <option value="polynomial">Polynomial</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group" id="polynomial-degree-group" style="display: none;">
+                                    <label for="polynomial-degree">Polynomial Degree:</label>
+                                    <input type="number" id="polynomial-degree" min="2" max="10" title="Degree of polynomial for baseline correction">
                                 </div>
                                 
                                 <button id="set-processing-btn" class="secondary-btn" disabled title="Apply the processing settings">Apply</button>
