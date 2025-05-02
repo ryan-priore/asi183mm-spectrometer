@@ -848,4 +848,152 @@ input[type="checkbox"] {
     .visualization-container {
         max-width: 100%;
     }
+}
+
+/* Display Mode Toggle */
+.display-mode-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding-left: 5px;
+}
+
+.toggle-buttons {
+    display: flex;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.mode-btn {
+    background-color: var(--button-secondary-bg);
+    color: var(--text-color);
+    border: none;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.mode-btn:first-child {
+    border-right: 1px solid var(--border-color);
+}
+
+.mode-btn.active {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+[data-theme="dark"] .mode-btn {
+    background-color: #333;
+    color: #fff;
+    border-color: #444;
+}
+
+[data-theme="dark"] .mode-btn.active {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+/* Axis Controls */
+.axis-controls {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding-right: 5px;
+}
+
+.axis-input {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.axis-input label {
+    width: auto;
+    font-size: 14px;
+}
+
+.axis-value {
+    width: 80px;
+    padding: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
+}
+
+.small-btn {
+    padding: 6px 10px;
+    font-size: 13px;
+    background-color: var(--button-secondary-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.small-btn:hover {
+    background-color: var(--button-hover-bg);
+}
+
+[data-theme="dark"] .small-btn {
+    background-color: #333;
+    color: #fff;
+    border-color: #444;
+}
+
+[data-theme="dark"] .small-btn:hover {
+    background-color: #444;
+}
+
+/* Responsive adjustments for display controls */
+@media (max-width: 768px) {
+    .display-mode-toggle,
+    .axis-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .axis-input {
+        justify-content: space-between;
+    }
+    
+    .small-btn {
+        margin-top: 5px;
+    }
+}
+
+/* Spectrum Controls Container */
+.spectrum-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 15px 0;
+    padding: 5px 0;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .spectrum-controls {
+    border-color: #444;
+}
+
+/* Responsive adjustments for spectrum controls */
+@media (max-width: 768px) {
+    .spectrum-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+        padding: 10px 0;
+    }
+    
+    .display-mode-toggle,
+    .axis-controls {
+        justify-content: center;
+        padding: 0;
+    }
 } 

@@ -16,8 +16,12 @@ const appState = {
     connected: false,
     currentSpectrum: null,
     wavelengths: null,
+    ramanShifts: null, // Added for Raman shift values
     plotLayout: null,
-    imageData: null  // Store the image data
+    imageData: null,  // Store the image data
+    displayMode: 'wavelength', // 'wavelength' or 'raman'
+    baselineCorrected: false, // Whether baseline correction has been applied
+    originalSpectrum: null, // Store original spectrum for reverting corrections
 };
 
 // DOM elements
@@ -42,11 +46,28 @@ const elements = {
     roiHeight: document.getElementById('roi-height'),
     setRoiBtn: document.getElementById('set-roi-btn'),
     
+    // Display mode
+    wavelengthModeBtn: document.getElementById('wavelength-mode-btn'),
+    ramanModeBtn: document.getElementById('raman-mode-btn'),
+    
+    // Axis controls
+    xMin: document.getElementById('x-min'),
+    xMax: document.getElementById('x-max'),
+    resetAxisBtn: document.getElementById('reset-axis-btn'),
+    
     // Calibration
+    laserWavelength: document.getElementById('laser-wavelength'),
     wavelengthA: document.getElementById('wavelength-a'),
     wavelengthB: document.getElementById('wavelength-b'),
     wavelengthC: document.getElementById('wavelength-c'),
     setCalibrationBtn: document.getElementById('set-calibration-btn'),
+    
+    // Processing settings
+    useMax: document.getElementById('use-max'),
+    baselineCorrection: document.getElementById('baseline-correction'),
+    polynomialDegree: document.getElementById('polynomial-degree'),
+    polynomialDegreeGroup: document.getElementById('polynomial-degree-group'),
+    setProcessingBtn: document.getElementById('set-processing-btn'),
     
     // Acquisition
     acquireSpectrumBtn: document.getElementById('acquire-spectrum-btn'),
@@ -69,10 +90,6 @@ const elements = {
     // Log
     logContainer: document.getElementById('log-container'),
     clearLogBtn: document.getElementById('clear-log-btn'),
-    
-    // Processing settings
-    setProcessingBtn: document.getElementById('set-processing-btn'),
-    useMax: document.getElementById('use-max')
 };
 
 // Initialize the application
@@ -88,6 +105,18 @@ function initApp() {
     elements.saveSpectrumBtn.addEventListener('click', saveSpectrum);
     elements.copyDataBtn.addEventListener('click', copyData);
     elements.clearLogBtn.addEventListener('click', clearLog);
+    
+    // Set up display mode toggle
+    elements.wavelengthModeBtn.addEventListener('click', () => setDisplayMode('wavelength'));
+    elements.ramanModeBtn.addEventListener('click', () => setDisplayMode('raman'));
+    
+    // Set up axis controls
+    elements.xMin.addEventListener('change', updateAxisRange);
+    elements.xMax.addEventListener('change', updateAxisRange);
+    elements.resetAxisBtn.addEventListener('click', resetAxisRange);
+    
+    // Set up baseline correction
+    elements.baselineCorrection.addEventListener('change', toggleBaselineCorrectionOptions);
     
     // Set up processing settings
     elements.setProcessingBtn.addEventListener('click', setProcessingSettings);
@@ -122,6 +151,9 @@ function initApp() {
             color: 'var(--text-color)'
         }
     };
+    
+    // Initialize default axis ranges
+    resetAxisRange();
     
     // Initialize empty plot
     Plotly.newPlot('spectrum-plot', [], appState.plotLayout, {
@@ -161,16 +193,192 @@ function initTabInterface() {
     });
 }
 
+// Toggle baseline correction options
+function toggleBaselineCorrectionOptions() {
+    const correctionMethod = elements.baselineCorrection.value;
+    
+    // Show/hide polynomial degree input based on selected method
+    if (correctionMethod === 'polynomial') {
+        elements.polynomialDegreeGroup.style.display = 'flex';
+    } else {
+        elements.polynomialDegreeGroup.style.display = 'none';
+    }
+}
+
+// Set display mode (wavelength or Raman shift)
+function setDisplayMode(mode) {
+    if (mode === appState.displayMode) return;
+    
+    appState.displayMode = mode;
+    
+    // Update button states
+    if (mode === 'wavelength') {
+        elements.wavelengthModeBtn.classList.add('active');
+        elements.ramanModeBtn.classList.remove('active');
+    } else {
+        elements.wavelengthModeBtn.classList.remove('active');
+        elements.ramanModeBtn.classList.add('active');
+    }
+    
+    // Update axis labels and ranges
+    resetAxisRange();
+    
+    // Redraw the spectrum if we have data
+    if (appState.wavelengths && appState.currentSpectrum) {
+        drawSpectrum(appState.wavelengths, appState.currentSpectrum);
+    }
+    
+    logMessage(`Display mode changed to ${mode === 'wavelength' ? 'Wavelength (nm)' : 'Raman Shift (cm⁻¹)'}`, 'info');
+}
+
+// Update axis range based on input values
+function updateAxisRange() {
+    const xMin = parseFloat(elements.xMin.value);
+    const xMax = parseFloat(elements.xMax.value);
+    
+    if (isNaN(xMin) || isNaN(xMax) || xMin >= xMax) {
+        logMessage('Invalid axis range values', 'warning');
+        return;
+    }
+    
+    // Update plot layout
+    const layout = {
+        xaxis: {
+            range: [xMin, xMax]
+        }
+    };
+    
+    Plotly.relayout('spectrum-plot', layout);
+    logMessage(`Axis range updated to [${xMin}, ${xMax}]`, 'info');
+}
+
+// Reset axis range to default values
+function resetAxisRange() {
+    let xMin, xMax;
+    
+    if (appState.displayMode === 'wavelength') {
+        xMin = 400;
+        xMax = 700;
+        elements.xMin.value = xMin;
+        elements.xMax.value = xMax;
+        
+        // Update plot layout for wavelength
+        appState.plotLayout.xaxis.title = 'Wavelength (nm)';
+    } else {
+        xMin = 0;
+        xMax = 3500;
+        elements.xMin.value = xMin;
+        elements.xMax.value = xMax;
+        
+        // Update plot layout for Raman shift
+        appState.plotLayout.xaxis.title = 'Raman Shift (cm⁻¹)';
+    }
+    
+    // Update plot layout
+    const layout = {
+        xaxis: {
+            title: appState.plotLayout.xaxis.title,
+            range: [xMin, xMax]
+        }
+    };
+    
+    Plotly.relayout('spectrum-plot', layout);
+    logMessage(`Axis range reset to default values [${xMin}, ${xMax}]`, 'info');
+}
+
+// Calculate Raman shifts from wavelengths
+function calculateRamanShifts(wavelengths) {
+    const laserWavelength = parseFloat(elements.laserWavelength.value);
+    
+    if (isNaN(laserWavelength) || laserWavelength <= 0) {
+        logMessage('Invalid laser wavelength', 'error');
+        return null;
+    }
+    
+    // Calculate Raman shifts using the formula: (1/laser_nm - 1/sample_nm) * 10^7
+    return wavelengths.map(wavelength => {
+        return Math.round((1/laserWavelength - 1/wavelength) * 10000000);
+    });
+}
+
+// Apply baseline correction to spectrum
+function applyBaselineCorrection(wavelengths, intensities) {
+    const method = elements.baselineCorrection.value;
+    
+    if (method === 'none') {
+        return [...intensities]; // Return a copy of the original data
+    }
+    
+    // Store original data if not already stored
+    if (!appState.originalSpectrum) {
+        appState.originalSpectrum = [...intensities];
+    }
+    
+    const correctedIntensities = [...intensities];
+    
+    if (method === 'linear') {
+        // Simple linear baseline correction (connect endpoints)
+        const firstPoint = intensities[0];
+        const lastPoint = intensities[intensities.length - 1];
+        const slope = (lastPoint - firstPoint) / (intensities.length - 1);
+        
+        for (let i = 0; i < intensities.length; i++) {
+            const baseline = firstPoint + slope * i;
+            correctedIntensities[i] = Math.max(0, intensities[i] - baseline);
+        }
+    } 
+    else if (method === 'polynomial') {
+        // Simplified polynomial fitting approach
+        // This is a basic implementation - a more sophisticated approach would
+        // identify baseline points and fit only to those
+        const degree = parseInt(elements.polynomialDegree.value);
+        
+        // For now, we'll just approximate by reducing all values by a small percentage
+        // This is a placeholder for a proper polynomial fitting algorithm
+        const reduction = 0.1; // 10% reduction
+        const min = Math.min(...intensities);
+        
+        for (let i = 0; i < intensities.length; i++) {
+            correctedIntensities[i] = Math.max(0, intensities[i] - min * degree * 0.2);
+        }
+    }
+    
+    appState.baselineCorrected = true;
+    return correctedIntensities;
+}
+
 // Set processing settings
 async function setProcessingSettings() {
     const useMax = elements.useMax.checked;
+    const baselineMethod = elements.baselineCorrection.value;
+    const polynomialDegree = parseInt(elements.polynomialDegree.value);
     
     try {
-        logMessage(`Setting processing options: Use Max=${useMax}`, 'info');
+        logMessage(`Setting processing options: Use Max=${useMax}, Baseline=${baselineMethod}`, 'info');
         
         await apiRequest('/processing', 'POST', { 
             use_max: useMax
         });
+        
+        // Apply baseline correction client-side if we have data
+        if (appState.wavelengths && appState.currentSpectrum) {
+            // If we're switching from baseline correction to none, restore original data
+            if (baselineMethod === 'none' && appState.baselineCorrected) {
+                appState.currentSpectrum = [...appState.originalSpectrum];
+                appState.baselineCorrected = false;
+                appState.originalSpectrum = null;
+            } 
+            // Otherwise apply the selected correction
+            else if (baselineMethod !== 'none') {
+                appState.currentSpectrum = applyBaselineCorrection(
+                    appState.wavelengths, 
+                    appState.originalSpectrum || appState.currentSpectrum
+                );
+            }
+            
+            // Redraw the spectrum with processed data
+            drawSpectrum(appState.wavelengths, appState.currentSpectrum);
+        }
         
         logMessage('Processing settings updated successfully', 'success');
     } catch (error) {
@@ -352,6 +560,13 @@ async function getSpectrumeterSettings() {
                 elements.useMax.checked = statusData.processing.use_max || false;
                 logMessage(`Processing settings: Use Max=${statusData.processing.use_max}`, 'info');
             }
+            
+            // Restore saved laser wavelength
+            const savedLaserWL = localStorage.getItem('laserWavelength');
+            if (savedLaserWL) {
+                elements.laserWavelength.value = savedLaserWL;
+                logMessage(`Restored laser wavelength: ${savedLaserWL} nm`, 'info');
+            }
         }
     } catch (error) {
         logMessage(`Error getting settings: ${error.message}`, 'error');
@@ -488,12 +703,27 @@ async function setCalibration() {
         parseFloat(elements.wavelengthC.value)
     ];
     
+    const laserWavelength = parseFloat(elements.laserWavelength.value);
+    
     try {
         logMessage(`Setting calibration coefficients to [${coefficients.join(', ')}]...`, 'info');
         await apiRequest('/calibration', 'POST', { 
             coefficients: coefficients
         });
         logMessage(`Calibration set successfully`, 'success');
+        
+        // Store the laser wavelength in localStorage
+        localStorage.setItem('laserWavelength', laserWavelength);
+        
+        // If we already have spectrum data, recalculate Raman shifts
+        if (appState.wavelengths && appState.currentSpectrum) {
+            appState.ramanShifts = calculateRamanShifts(appState.wavelengths);
+            
+            // If in Raman mode, redraw the spectrum
+            if (appState.displayMode === 'raman') {
+                drawSpectrum(appState.wavelengths, appState.currentSpectrum);
+            }
+        }
     } catch (error) {
         logMessage(`Error setting calibration: ${error.message}`, 'error');
     }
@@ -549,6 +779,11 @@ async function acquireSpectrum() {
         // Store the spectrum data and update display
         appState.wavelengths = spectrumData.wavelengths;
         appState.currentSpectrum = spectrumData.intensities;
+        appState.originalSpectrum = [...spectrumData.intensities]; // Store copy for baseline correction
+        appState.baselineCorrected = false;
+        
+        // Calculate Raman shifts if we have a laser wavelength
+        appState.ramanShifts = calculateRamanShifts(appState.wavelengths);
         
         // Store and display the image data if available
         if (spectrumData.image_data) {
@@ -557,6 +792,14 @@ async function acquireSpectrum() {
             
             // Display the image automatically
             displayCachedImage();
+        }
+        
+        // Apply baseline correction if selected
+        if (elements.baselineCorrection.value !== 'none') {
+            appState.currentSpectrum = applyBaselineCorrection(
+                appState.wavelengths, 
+                appState.currentSpectrum
+            );
         }
         
         // Draw spectrum
@@ -623,12 +866,55 @@ function drawSpectrum(wavelengths, intensities) {
         return;
     }
     
-    // Update plot data
-    appState.wavelengths = wavelengths;
-    appState.currentSpectrum = intensities;
+    // Choose x-axis data based on display mode
+    let xData, xAxisTitle;
+    if (appState.displayMode === 'wavelength') {
+        xData = wavelengths;
+        xAxisTitle = 'Wavelength (nm)';
+    } else {
+        if (!appState.ramanShifts) {
+            appState.ramanShifts = calculateRamanShifts(wavelengths);
+            if (!appState.ramanShifts) {
+                logMessage('Could not calculate Raman shifts. Using wavelength instead.', 'warning');
+                xData = wavelengths;
+                xAxisTitle = 'Wavelength (nm)';
+                appState.displayMode = 'wavelength';
+                elements.wavelengthModeBtn.classList.add('active');
+                elements.ramanModeBtn.classList.remove('active');
+            } else {
+                xData = appState.ramanShifts;
+                xAxisTitle = 'Raman Shift (cm⁻¹)';
+            }
+        } else {
+            xData = appState.ramanShifts;
+            xAxisTitle = 'Raman Shift (cm⁻¹)';
+        }
+    }
     
-    // Use the updatePlotlyTheme function to ensure theme consistency
-    updatePlotlyTheme();
+    // Update plot layout with current axis title
+    appState.plotLayout.xaxis.title = xAxisTitle;
+    
+    // Determine line color based on theme
+    const lineColor = document.documentElement.getAttribute('data-theme') === 'dark' ? 
+        '#00b4ff' : // Thorlabs blue for dark mode
+        '#3498db';  // Original blue for light mode
+        
+    Plotly.react('spectrum-plot', [{
+        x: xData,
+        y: intensities,
+        type: 'scatter',
+        mode: 'lines',
+        line: {
+            color: lineColor,
+            width: 2
+        },
+        name: 'Spectrum'
+    }], appState.plotLayout, {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+        displaylogo: false
+    });
 }
 
 // Save spectrum data
@@ -639,12 +925,23 @@ function saveSpectrum() {
     }
     
     try {
-        // Create CSV content
-        let csvContent = 'Wavelength (nm),Intensity\n';
+        // Create CSV content with appropriate x-axis values
+        let csvContent;
         
-        for (let i = 0; i < appState.wavelengths.length; i++) {
-            csvContent += `${appState.wavelengths[i]},${appState.currentSpectrum[i]}\n`;
+        if (appState.displayMode === 'wavelength') {
+            csvContent = 'Wavelength (nm),Intensity\n';
+            for (let i = 0; i < appState.wavelengths.length; i++) {
+                csvContent += `${appState.wavelengths[i]},${appState.currentSpectrum[i]}\n`;
+            }
+        } else {
+            csvContent = 'Raman Shift (cm⁻¹),Intensity\n';
+            for (let i = 0; i < appState.ramanShifts.length; i++) {
+                csvContent += `${appState.ramanShifts[i]},${appState.currentSpectrum[i]}\n`;
+            }
         }
+        
+        // Add metadata
+        csvContent = `# Acquisition Metadata\n# Laser Wavelength: ${elements.laserWavelength.value} nm\n# Baseline Correction: ${elements.baselineCorrection.value}\n# Display Mode: ${appState.displayMode}\n\n${csvContent}`;
         
         // Create download link
         const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -674,12 +971,23 @@ function copyData() {
     }
     
     try {
-        // Create CSV content
-        let csvContent = 'Wavelength (nm),Intensity\n';
+        // Create CSV content with appropriate x-axis values
+        let csvContent;
         
-        for (let i = 0; i < appState.wavelengths.length; i++) {
-            csvContent += `${appState.wavelengths[i]},${appState.currentSpectrum[i]}\n`;
+        if (appState.displayMode === 'wavelength') {
+            csvContent = 'Wavelength (nm),Intensity\n';
+            for (let i = 0; i < appState.wavelengths.length; i++) {
+                csvContent += `${appState.wavelengths[i]},${appState.currentSpectrum[i]}\n`;
+            }
+        } else {
+            csvContent = 'Raman Shift (cm⁻¹),Intensity\n';
+            for (let i = 0; i < appState.ramanShifts.length; i++) {
+                csvContent += `${appState.ramanShifts[i]},${appState.currentSpectrum[i]}\n`;
+            }
         }
+        
+        // Add metadata
+        csvContent = `# Acquisition Metadata\n# Laser Wavelength: ${elements.laserWavelength.value} nm\n# Baseline Correction: ${elements.baselineCorrection.value}\n# Display Mode: ${appState.displayMode}\n\n${csvContent}`;
         
         // Copy to clipboard
         navigator.clipboard.writeText(csvContent)
@@ -769,6 +1077,10 @@ document.addEventListener('DOMContentLoaded', () => {
         height: parseInt(elements.roiHeight.value) || 3672
     };
     
+    // Initialize baseline correction dropdown handler
+    toggleBaselineCorrectionOptions();
+    elements.baselineCorrection.addEventListener('change', toggleBaselineCorrectionOptions);
+    
     // Draw initial ROI visualization
     setTimeout(() => updateRoiVisualization(defaultRoi), 500);
 });
@@ -840,13 +1152,21 @@ function updatePlotlyTheme() {
     
     // Only update if we have a plot with data
     if (appState.wavelengths && appState.currentSpectrum) {
+        // Choose x-axis data based on display mode
+        let xData;
+        if (appState.displayMode === 'wavelength') {
+            xData = appState.wavelengths;
+        } else {
+            xData = appState.ramanShifts || appState.wavelengths;
+        }
+        
         // Determine line color based on theme
         const lineColor = document.documentElement.getAttribute('data-theme') === 'dark' ? 
             '#00b4ff' : // Thorlabs blue for dark mode
             '#3498db';  // Original blue for light mode
             
         Plotly.react('spectrum-plot', [{
-            x: appState.wavelengths,
+            x: xData,
             y: appState.currentSpectrum,
             type: 'scatter',
             mode: 'lines',

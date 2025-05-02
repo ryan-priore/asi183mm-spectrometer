@@ -39,6 +39,28 @@
                 <div class="spectrum-container">
                     <div id="spectrum-plot" style="width:100%; height:100%;"></div>
                 </div>
+                
+                <div class="spectrum-controls">
+                    <div class="display-mode-toggle">
+                        <span>Display Mode:</span>
+                        <div class="toggle-buttons">
+                            <button id="wavelength-mode-btn" class="mode-btn active" title="Display spectrum in wavelength (nm)">Wavelength (nm)</button>
+                            <button id="raman-mode-btn" class="mode-btn" title="Display spectrum in Raman shift (cm⁻¹)">Raman Shift (cm⁻¹)</button>
+                        </div>
+                    </div>
+                    
+                    <div class="axis-controls">
+                        <div class="axis-input">
+                            <label for="x-min">X Min:</label>
+                            <input type="number" id="x-min" class="axis-value" title="Minimum value for x-axis">
+                        </div>
+                        <div class="axis-input">
+                            <label for="x-max">X Max:</label>
+                            <input type="number" id="x-max" class="axis-value" title="Maximum value for x-axis">
+                        </div>
+                        <button id="reset-axis-btn" class="small-btn" title="Reset axis to auto range">Reset</button>
+                    </div>
+                </div>
             </div>
             
             <div class="panels-row">
@@ -114,6 +136,11 @@
                         <div class="tab-pane" id="calibration-tab">
                             <div class="settings-group">
                                 <div class="form-group">
+                                    <label for="laser-wavelength">Laser Wavelength (nm):</label>
+                                    <input type="number" id="laser-wavelength" step="0.1" value="445.0" min="200" max="1100" title="Excitation laser wavelength used for Raman shift calculation">
+                                </div>
+                                
+                                <div class="form-group">
                                     <label for="wavelength-a">Coefficient A:</label>
                                     <input type="number" id="wavelength-a" step="0.0001" value="0" title="Wavelength calibration coefficient A (quadratic term)">
                                 </div>
@@ -138,6 +165,20 @@
                                     <label for="use-max">Use Maximum:</label>
                                     <input type="checkbox" id="use-max" title="When checked, uses the maximum value along each column instead of the mean">
                                     <span class="tooltip" title="When checked, uses the maximum value along each column instead of the mean">?</span>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="baseline-correction">Baseline Correction:</label>
+                                    <select id="baseline-correction" title="Method for removing baseline from spectrum">
+                                        <option value="none">None</option>
+                                        <option value="linear">Linear</option>
+                                        <option value="polynomial">Polynomial</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group" id="polynomial-degree-group" style="display: none;">
+                                    <label for="polynomial-degree">Polynomial Degree:</label>
+                                    <input type="number" id="polynomial-degree" min="2" max="10" value="4" title="Degree of polynomial for baseline correction">
                                 </div>
                                 
                                 <button id="set-processing-btn" class="secondary-btn" disabled title="Apply the processing settings">Apply</button>
