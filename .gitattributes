@@ -1,0 +1,9 @@
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# Ensure install.sh is executable
+scripts/install.sh text eol=lf executable
+scripts/run_server.sh text eol=lf executable
+src/main.py text eol=lf executable
+tests/test_env.py text eol=lf executable
+tests/test_camera.py text eol=lf executable 
