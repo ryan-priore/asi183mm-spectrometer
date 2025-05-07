@@ -17,6 +17,15 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Get the actual user's home directory, even when running with sudo
+if [ "$(id -u)" -eq 0 ]; then
+    # If running as root, get the original user's home directory
+    REAL_USER=$(logname 2>/dev/null || echo ${SUDO_USER:-${USER}})
+    REAL_HOME=$(eval echo ~$REAL_USER)
+else
+    REAL_HOME="$HOME"
+fi
+
 # Check Python version
 if command_exists python3; then
     PYTHON_VERSION=$(python3 --version | awk '{print $2}')
@@ -151,15 +160,22 @@ export ZWO_ASI_LIB="$ASI_LIB_PATH"
 echo -e "${GREEN}Set ZWO_ASI_LIB for current session: $ZWO_ASI_LIB${NC}"
 
 # Add to .bashrc if not already present
-if ! grep -q "export ZWO_ASI_LIB=$ASI_LIB_PATH" ~/.bashrc; then
-    printf "\n# ZWO ASI Camera SDK Library Path\nexport ZWO_ASI_LIB=%s\n" "$ASI_LIB_PATH" >> ~/.bashrc
-    if grep -q "export ZWO_ASI_LIB=$ASI_LIB_PATH" ~/.bashrc; then
-        echo -e "${GREEN}Successfully added ZWO_ASI_LIB to ~/.bashrc${NC}"
+if ! grep -q "export ZWO_ASI_LIB=" "$REAL_HOME/.bashrc"; then
+    # Add a newline and the export statement
+    echo '' >> "$REAL_HOME/.bashrc"
+    echo '# ZWO ASI Camera SDK Library Path' >> "$REAL_HOME/.bashrc"
+    echo "export ZWO_ASI_LIB=$ASI_LIB_PATH" >> "$REAL_HOME/.bashrc"
+    
+    # Verify the write was successful
+    if grep -q "export ZWO_ASI_LIB=$ASI_LIB_PATH" "$REAL_HOME/.bashrc"; then
+        echo -e "${GREEN}Successfully added ZWO_ASI_LIB to $REAL_HOME/.bashrc${NC}"
+        echo -e "${YELLOW}To apply changes, run: source $REAL_HOME/.bashrc${NC}"
     else
-        echo -e "${RED}Failed to write to ~/.bashrc${NC}"
+        echo -e "${RED}Failed to write to $REAL_HOME/.bashrc${NC}"
+        echo -e "${YELLOW}Please manually add: export ZWO_ASI_LIB=$ASI_LIB_PATH to your ~/.bashrc${NC}"
     fi
 else
-    echo -e "${GREEN}ZWO_ASI_LIB already set in ~/.bashrc${NC}"
+    echo -e "${GREEN}ZWO_ASI_LIB already set in $REAL_HOME/.bashrc${NC}"
 fi
 
 # Verify the library exists
