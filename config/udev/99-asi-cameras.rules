@@ -1,9 +1,0 @@
-# udev rules for ZWO ASI cameras
-# These rules set the correct permissions for ZWO ASI camera devices
-# to allow non-root users to access them.
-# 
-# Place this file in /etc/udev/rules.d/ and run:
-# sudo udevadm control --reload-rules && sudo udevadm trigger
-#
-# ASI183MM USB device
-SUBSYSTEM=="usb", ATTRS{idVendor}=="03c3", ATTRS{idProduct}=="183a", GROUP="users", MODE="0666" 
