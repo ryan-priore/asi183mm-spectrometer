@@ -27,6 +27,7 @@ cd asi183mm-spectrometer
 
 # Run the installation script
 sudo ./scripts/install.sh
+source ~/.bashrc
 ```
 
 ### Windows:

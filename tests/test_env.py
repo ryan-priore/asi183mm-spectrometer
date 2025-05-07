@@ -43,7 +43,7 @@ def main():
     print("\nChecking required packages:")
     packages = [
         "numpy", "scipy", "fastapi", "uvicorn", "pydantic", 
-        "matplotlib", "zwoasi", "PIL"
+        "plotly", "zwoasi", "PIL"
     ]
     
     all_good = True
