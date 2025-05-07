@@ -70,105 +70,106 @@ fi
 echo -e "${GREEN}Activating virtual environment...${NC}"
 source .venv/bin/activate
 
-# Check for and install ZWO ASI SDK
-echo -e "${GREEN}Checking for ZWO ASI SDK...${NC}"
-
-# Create ASI_SDK directory in the project root if it doesn't exist
-mkdir -p ASI_SDK
-
-ASI_LIB_FOUND=false
-
-# First, try to extract and install from the bundled SDK
-SDK_ARCHIVE="ASI_Camera_SDK/ASI_linux_mac_SDK_V1.36.tar.bz2"
-if [ -f "$SDK_ARCHIVE" ]; then
-    echo -e "${GREEN}Found bundled ASI SDK archive. Extracting...${NC}"
-    
-    # Check if tar command exists
-    if command_exists tar; then
-        # Extract the SDK to the ASI_SDK directory
-        tar -xjf "$SDK_ARCHIVE" -C ASI_SDK --strip-components=1
-        
-        # Check if extraction was successful
-        if [ $? -eq 0 ]; then
-            # Check platform and architecture
-            PLATFORM=$(uname)
-            ARCH=$(uname -m)
-            
-            if [ "$PLATFORM" = "Linux" ]; then
-                if [ "$ARCH" = "x86_64" ]; then
-                    LIB_PATH="ASI_SDK/lib/x64/libASICamera2.so"
-                elif [ "$ARCH" = "i686" ] || [ "$ARCH" = "i386" ]; then
-                    LIB_PATH="ASI_SDK/lib/x86/libASICamera2.so"
-                elif [[ "$ARCH" == arm* ]] || [[ "$ARCH" == aarch64* ]]; then
-                    # For ARM architectures (Raspberry Pi, etc)
-                    if [ "$ARCH" = "aarch64" ]; then
-                        LIB_PATH="ASI_SDK/lib/armv8/libASICamera2.so"
-                    else
-                        LIB_PATH="ASI_SDK/lib/armv7/libASICamera2.so"
-                    fi
-                fi
-            elif [ "$PLATFORM" = "Darwin" ]; then
-                # For macOS
-                LIB_PATH="ASI_SDK/lib/mac/libASICamera2.dylib"
-            fi
-            
-            if [ -f "$LIB_PATH" ]; then
-                echo -e "${GREEN}Found ASI SDK library at: $LIB_PATH${NC}"
-                ASI_LIB_FOUND=true
-                
-                # Make the absolute path
-                ABSOLUTE_LIB_PATH="$(pwd)/$LIB_PATH"
-                
-                # Set environment variable
-                echo "export ZWO_ASI_LIB=$ABSOLUTE_LIB_PATH" >> ~/.bashrc
-                export ZWO_ASI_LIB="$ABSOLUTE_LIB_PATH"
-            else
-                echo -e "${YELLOW}Could not find appropriate library for your system in the extracted SDK${NC}"
-            fi
-        else
-            echo -e "${RED}Failed to extract ASI SDK archive${NC}"
-        fi
-    else
-        echo -e "${RED}The 'tar' command is not available. Cannot extract the SDK.${NC}"
-    fi
-else
-    echo -e "${YELLOW}ASI SDK archive not found in ASI_Camera_SDK folder${NC}"
-fi
-
-# If SDK was not found or extraction failed, check common system paths
-if [ "$ASI_LIB_FOUND" = false ]; then
-    ASI_LIB_PATHS=(
-        "/usr/local/lib/libASICamera2.so"
-        "/usr/lib/libASICamera2.so"
-        "$HOME/ASI_SDK/libASICamera2.so"
-    )
-
-    for path in "${ASI_LIB_PATHS[@]}"; do
-        if [ -f "$path" ]; then
-            echo -e "${GREEN}Found ASI SDK library at: $path${NC}"
-            ASI_LIB_FOUND=true
-            
-            # Set environment variable
-            echo "export ZWO_ASI_LIB=$path" >> ~/.bashrc
-            export ZWO_ASI_LIB="$path"
-            
-            break
-        fi
-    done
-fi
-
-# If still not found, inform the user
-if [ "$ASI_LIB_FOUND" = false ]; then
-    echo -e "${YELLOW}Warning: ASI SDK library not found${NC}"
-    echo -e "${YELLOW}Please download and install the ZWO ASI SDK from:${NC}"
-    echo -e "${YELLOW}https://astronomy-imaging-camera.com/software-drivers${NC}"
-    echo -e "${YELLOW}After installation, set the ZWO_ASI_LIB environment variable to the library path${NC}"
-fi
-
-# Install dependencies
-echo -e "${GREEN}Installing dependencies...${NC}"
+# Install Python dependencies
+echo -e "${GREEN}Installing Python dependencies...${NC}"
 pip install --upgrade pip
 pip install -r requirements.txt
+
+# Extract and install SDK
+echo -e "${GREEN}Setting up ZWO ASI SDK...${NC}"
+SDK_ARCHIVE="ASI_Camera_SDK/ASI_linux_mac_SDK_V1.36.tar.bz2"
+if [ ! -f "$SDK_ARCHIVE" ]; then
+    echo -e "${RED}Error: ASI SDK archive not found at $SDK_ARCHIVE${NC}"
+    exit 1
+fi
+
+TEMP_DIR=$(mktemp -d)
+echo -e "${GREEN}Extracting SDK to temporary directory...${NC}"
+tar -xf "$SDK_ARCHIVE" -C "$TEMP_DIR"
+
+# Copy library based on architecture
+ARCH=$(uname -m)
+if [ "$ARCH" = "aarch64" ]; then
+    if [ "$(id -u)" -eq 0 ]; then
+        cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/armv8/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    else
+        sudo cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/armv8/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    fi
+elif [ "$ARCH" = "x86_64" ]; then
+    if [ "$(id -u)" -eq 0 ]; then
+        cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/x64/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    else
+        sudo cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/x64/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    fi
+elif [ "$ARCH" = "i686" ] || [ "$ARCH" = "i386" ]; then
+    if [ "$(id -u)" -eq 0 ]; then
+        cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/x86/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    else
+        sudo cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/x86/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    fi
+elif [[ "$ARCH" == arm* ]]; then
+    if [ "$(id -u)" -eq 0 ]; then
+        cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/armv7/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    else
+        sudo cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/armv7/libASICamera2.so.1.36" /usr/local/lib/libASICamera2.so
+    fi
+else
+    echo -e "${RED}Error: Unsupported architecture: $ARCH${NC}"
+    rm -rf "$TEMP_DIR"
+    exit 1
+fi
+
+# Install udev rules
+if [ "$(id -u)" -eq 0 ]; then
+    echo -e "${GREEN}Installing udev rules...${NC}"
+    cp "$TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/asi.rules" /lib/udev/rules.d/
+    udevadm control --reload-rules
+    udevadm trigger
+else
+    echo -e "${YELLOW}Not running as root, skipping udev rules installation${NC}"
+    echo -e "${YELLOW}Install them manually with:${NC}"
+    echo -e "${YELLOW}  sudo cp $TEMP_DIR/ASI_linux_mac_SDK_V1.36/lib/asi.rules /lib/udev/rules.d/${NC}"
+    echo -e "${YELLOW}  sudo udevadm control --reload-rules${NC}"
+    echo -e "${YELLOW}  sudo udevadm trigger${NC}"
+fi
+
+# Set up environment
+ASI_LIB_PATH="/usr/local/lib/libASICamera2.so"
+
+# Run ldconfig to update library cache
+if [ "$(id -u)" -eq 0 ]; then
+    ldconfig
+else
+    sudo ldconfig
+fi
+
+# Set environment variable
+echo -e "${GREEN}Setting up ZWO_ASI_LIB environment variable...${NC}"
+
+# Set for current session
+export ZWO_ASI_LIB="$ASI_LIB_PATH"
+echo -e "${GREEN}Set ZWO_ASI_LIB for current session: $ZWO_ASI_LIB${NC}"
+
+# Add to .bashrc if not already present
+if ! grep -q "export ZWO_ASI_LIB=$ASI_LIB_PATH" ~/.bashrc; then
+    printf "\n# ZWO ASI Camera SDK Library Path\nexport ZWO_ASI_LIB=%s\n" "$ASI_LIB_PATH" >> ~/.bashrc
+    if grep -q "export ZWO_ASI_LIB=$ASI_LIB_PATH" ~/.bashrc; then
+        echo -e "${GREEN}Successfully added ZWO_ASI_LIB to ~/.bashrc${NC}"
+    else
+        echo -e "${RED}Failed to write to ~/.bashrc${NC}"
+    fi
+else
+    echo -e "${GREEN}ZWO_ASI_LIB already set in ~/.bashrc${NC}"
+fi
+
+# Verify the library exists
+if [ ! -f "$ASI_LIB_PATH" ]; then
+    echo -e "${RED}Warning: ASI SDK library not found at $ASI_LIB_PATH${NC}"
+    echo -e "${YELLOW}Please ensure the library was copied correctly${NC}"
+fi
+
+# Clean up temporary directory
+rm -rf "$TEMP_DIR"
 
 # Ask about RPi.GPIO installation
 read -p "Do you want to install RPi.GPIO for Raspberry Pi GPIO access? (y/n): " install_gpio
@@ -187,33 +188,6 @@ chmod +x scripts/run_server.sh
 chmod +x tests/test_env.py
 chmod +x tests/test_camera.py
 
-# Add a section for udev rules installation
-install_udev_rules() {
-    echo "Installing udev rules for camera access..."
-    
-    # Check if we're running as root (needed for udev rules)
-    if [ "$EUID" -ne 0 ]; then
-        echo "Skipping udev rules installation - not running as root"
-        echo "You can install them manually with:"
-        echo "  sudo cp config/udev/99-asi-cameras.rules /etc/udev/rules.d/"
-        echo "  sudo udevadm control --reload-rules && sudo udevadm trigger"
-        return
-    fi
-    
-    # Copy rules file
-    cp config/udev/99-asi-cameras.rules /etc/udev/rules.d/
-    
-    # Reload rules and trigger
-    udevadm control --reload-rules
-    udevadm trigger
-    
-    echo "udev rules installed successfully"
-}
-
-# Add this function call to the appropriate place in the script, 
-# likely after SDK installation but before finishing
-install_udev_rules
-
 echo -e "${GREEN}Installation complete!${NC}"
 echo ""
 echo -e "${GREEN}To run the test script to verify your environment:${NC}"
@@ -222,11 +196,6 @@ echo ""
 echo -e "${GREEN}To start the spectrometer backend:${NC}"
 echo -e "scripts/run_server.sh"
 echo ""
-
-if [ "$ASI_LIB_FOUND" = true ]; then
-    echo -e "${GREEN}ZWO ASI SDK library is set to: ${YELLOW}$ZWO_ASI_LIB${NC}"
-else
-    echo -e "${YELLOW}Don't forget to set the ZWO_ASI_LIB environment variable!${NC}"
-fi
+echo -e "${GREEN}ZWO ASI SDK library is set to: ${YELLOW}$ZWO_ASI_LIB${NC}"
 
 exit 0 
