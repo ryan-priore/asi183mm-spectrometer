@@ -70,29 +70,142 @@ fi
 echo -e "${GREEN}Activating virtual environment...${NC}"
 source .venv/bin/activate
 
-# Check for ZWO ASI SDK
-ASI_LIB_PATHS=(
-    "/usr/local/lib/libASICamera2.so"
-    "/usr/lib/libASICamera2.so"
-    "$HOME/ASI_SDK/libASICamera2.so"
-)
+# Check for and install ZWO ASI SDK
+echo -e "${GREEN}Checking for ZWO ASI SDK...${NC}"
 
 ASI_LIB_FOUND=false
-for path in "${ASI_LIB_PATHS[@]}"; do
-    if [ -f "$path" ]; then
-        echo -e "${GREEN}Found ASI SDK library at: $path${NC}"
-        ASI_LIB_FOUND=true
-        
-        # Set environment variable
-        echo "export ZWO_ASI_LIB=$path" >> ~/.bashrc
-        export ZWO_ASI_LIB="$path"
-        
-        break
-    fi
-done
+TMP_DIR=$(mktemp -d)
 
+# First, try to install from the bundled SDK
+SDK_ARCHIVE="ASI_Camera_SDK/ASI_linux_mac_SDK_V1.36.tar.bz2"
+if [ -f "$SDK_ARCHIVE" ]; then
+    echo -e "${GREEN}Found bundled ASI SDK archive. Extracting...${NC}"
+    
+    # Check if tar command exists
+    if command_exists tar; then
+        # Extract the SDK to the temporary directory
+        tar -xjf "$SDK_ARCHIVE" -C "$TMP_DIR"
+        
+        # Check if extraction was successful
+        if [ $? -eq 0 ]; then
+            # Check platform and architecture
+            PLATFORM=$(uname)
+            ARCH=$(uname -m)
+            
+            # Determine the appropriate library path
+            if [ "$PLATFORM" = "Linux" ]; then
+                if [ "$ARCH" = "x86_64" ]; then
+                    LIB_DIR="$TMP_DIR/lib/x64"
+                elif [ "$ARCH" = "i686" ] || [ "$ARCH" = "i386" ]; then
+                    LIB_DIR="$TMP_DIR/lib/x86"
+                elif [[ "$ARCH" == arm* ]] || [[ "$ARCH" == aarch64* ]]; then
+                    # For ARM architectures (Raspberry Pi, etc)
+                    if [ "$ARCH" = "aarch64" ]; then
+                        LIB_DIR="$TMP_DIR/lib/armv8"
+                    else
+                        LIB_DIR="$TMP_DIR/lib/armv7"
+                    fi
+                fi
+                
+                # Library and target names
+                if [ "$PLATFORM" = "Linux" ]; then
+                    LIB_NAME="libASICamera2.so.1.36"
+                    TARGET_LIB="/usr/local/lib/libASICamera2.so"
+                elif [ "$PLATFORM" = "Darwin" ]; then
+                    LIB_DIR="$TMP_DIR/lib/mac"
+                    LIB_NAME="libASICamera2.dylib"
+                    TARGET_LIB="/usr/local/lib/libASICamera2.dylib"
+                fi
+                
+                if [ -f "$LIB_DIR/$LIB_NAME" ]; then
+                    echo -e "${GREEN}Found ASI SDK library at: $LIB_DIR/$LIB_NAME${NC}"
+                    
+                    # Install udev rules if Linux
+                    if [ "$PLATFORM" = "Linux" ] && [ -f "$TMP_DIR/lib/asi.rules" ]; then
+                        echo -e "${GREEN}Installing udev rules for camera access...${NC}"
+                        if [ "$(id -u)" -eq 0 ]; then
+                            cp "$TMP_DIR/lib/asi.rules" /lib/udev/rules.d/
+                            echo -e "${GREEN}Copied asi.rules to /lib/udev/rules.d/${NC}"
+                        else
+                            echo -e "${YELLOW}Not running as root, skipping udev rules installation${NC}"
+                            echo -e "${YELLOW}You can install them manually with:${NC}"
+                            echo -e "${YELLOW}  sudo cp $TMP_DIR/lib/asi.rules /lib/udev/rules.d/${NC}"
+                        fi
+                    fi
+                    
+                    # Copy library to system location
+                    if [ "$(id -u)" -eq 0 ]; then
+                        cp "$LIB_DIR/$LIB_NAME" "$TARGET_LIB"
+                        echo -e "${GREEN}Copied $LIB_NAME to $TARGET_LIB${NC}"
+                        
+                        # Update library cache if on Linux
+                        if [ "$PLATFORM" = "Linux" ]; then
+                            ldconfig
+                            echo -e "${GREEN}Updated library cache with ldconfig${NC}"
+                        fi
+                        
+                        # Set environment variable
+                        export ZWO_ASI_LIB="$TARGET_LIB"
+                        echo "export ZWO_ASI_LIB=$TARGET_LIB" >> ~/.bashrc
+                        echo -e "${GREEN}Set ZWO_ASI_LIB environment variable to $TARGET_LIB${NC}"
+                        echo -e "${GREEN}Added ZWO_ASI_LIB to ~/.bashrc${NC}"
+                        
+                        ASI_LIB_FOUND=true
+                    else
+                        echo -e "${YELLOW}Not running as root, skipping library installation${NC}"
+                        echo -e "${YELLOW}To install the ASI Camera SDK manually:${NC}"
+                        echo -e "${YELLOW}  1. Copy $LIB_DIR/$LIB_NAME to $TARGET_LIB:${NC}"
+                        echo -e "${YELLOW}     sudo cp $LIB_DIR/$LIB_NAME $TARGET_LIB${NC}"
+                        echo -e "${YELLOW}  2. Update library cache:${NC}"
+                        echo -e "${YELLOW}     sudo ldconfig${NC}"
+                        echo -e "${YELLOW}  3. Set environment variable:${NC}"
+                        echo -e "${YELLOW}     export ZWO_ASI_LIB=$TARGET_LIB${NC}"
+                        echo -e "${YELLOW}     echo \"export ZWO_ASI_LIB=$TARGET_LIB\" >> ~/.bashrc${NC}"
+                    fi
+                else
+                    echo -e "${YELLOW}Could not find appropriate library for your system in the extracted SDK${NC}"
+                fi
+            fi
+        else
+            echo -e "${RED}Failed to extract ASI SDK archive${NC}"
+        fi
+    else
+        echo -e "${RED}The 'tar' command is not available. Cannot extract the SDK.${NC}"
+    fi
+else
+    echo -e "${YELLOW}ASI SDK archive not found in ASI_Camera_SDK folder${NC}"
+fi
+
+# Clean up temporary directory
+rm -rf "$TMP_DIR"
+
+# If SDK was not found or installation failed, check common system paths
 if [ "$ASI_LIB_FOUND" = false ]; then
-    echo -e "${YELLOW}Warning: ASI SDK library not found in common locations${NC}"
+    ASI_LIB_PATHS=(
+        "/usr/local/lib/libASICamera2.so"
+        "/usr/lib/libASICamera2.so"
+        "$HOME/ASI_SDK/libASICamera2.so"
+    )
+
+    for path in "${ASI_LIB_PATHS[@]}"; do
+        if [ -f "$path" ]; then
+            echo -e "${GREEN}Found ASI SDK library at: $path${NC}"
+            ASI_LIB_FOUND=true
+            
+            # Set environment variable
+            export ZWO_ASI_LIB="$path"
+            echo "export ZWO_ASI_LIB=$path" >> ~/.bashrc
+            echo -e "${GREEN}Set ZWO_ASI_LIB environment variable to $path${NC}"
+            echo -e "${GREEN}Added ZWO_ASI_LIB to ~/.bashrc${NC}"
+            
+            break
+        fi
+    done
+fi
+
+# If still not found, inform the user
+if [ "$ASI_LIB_FOUND" = false ]; then
+    echo -e "${YELLOW}Warning: ASI SDK library not found${NC}"
     echo -e "${YELLOW}Please download and install the ZWO ASI SDK from:${NC}"
     echo -e "${YELLOW}https://astronomy-imaging-camera.com/software-drivers${NC}"
     echo -e "${YELLOW}After installation, set the ZWO_ASI_LIB environment variable to the library path${NC}"
