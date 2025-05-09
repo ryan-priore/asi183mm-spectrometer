@@ -142,6 +142,28 @@ else
     echo -e "${YELLOW}  sudo udevadm trigger${NC}"
 fi
 
+# Set USB memory allocation to support the camera
+echo -e "${GREEN}Setting USB memory allocation...${NC}"
+if [ "$(id -u)" -eq 0 ]; then
+    # Immediately set USB memory
+    echo 200 > /sys/module/usbcore/parameters/usbfs_memory_mb
+    
+    # Make the setting persistent by adding to sysctl.conf
+    if ! grep -q "fs.usb-storage.usbfs_memory_mb" "/etc/sysctl.conf"; then
+        echo "fs.usb-storage.usbfs_memory_mb = 200" >> /etc/sysctl.conf
+        echo -e "${GREEN}Added USB memory setting to /etc/sysctl.conf${NC}"
+    else
+        echo -e "${GREEN}USB memory setting already in sysctl.conf${NC}"
+    fi
+else
+    # If not running as root, display instructions
+    echo -e "${YELLOW}Not running as root, cannot set USB memory allocation${NC}"
+    echo -e "${YELLOW}Run the following commands to set USB memory:${NC}"
+    echo -e "${YELLOW}  sudo sh -c 'echo 200 > /sys/module/usbcore/parameters/usbfs_memory_mb'${NC}"
+    echo -e "${YELLOW}  sudo sh -c 'echo \"fs.usb-storage.usbfs_memory_mb = 200\" >> /etc/sysctl.conf'${NC}"
+    echo -e "${YELLOW}  sudo sysctl -p${NC}"
+fi
+
 # Set up environment
 ASI_LIB_PATH="/usr/local/lib/libASICamera2.so"
 
