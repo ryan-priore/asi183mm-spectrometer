@@ -134,31 +134,63 @@ function initApp() {
     // Initialize tab interface
     initTabInterface();
     
+    // Initialize theme first
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDarkMode = savedTheme === 'dark' || (!savedTheme && prefersDark);
+    
+    // Set initial theme
+    if (isDarkMode) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        if (elements.themeIcon) {
+            elements.themeIcon.textContent = '☀️';
+        }
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        if (elements.themeIcon) {
+            elements.themeIcon.textContent = '🌙';
+        }
+    }
+    
     // Set up theme toggle
     setupThemeToggle();
     
-    // Initialize default Plotly layout
+    // Get theme colors
+    const root = document.documentElement;
+    const plotBgColor = root.style.getPropertyValue('--plot-bg-color') || 
+                       getComputedStyle(root).getPropertyValue('--plot-bg-color').trim() ||
+                       (isDarkMode ? '#1a1a1a' : '#ffffff');
+    const textColor = root.style.getPropertyValue('--text-color') || 
+                     getComputedStyle(root).getPropertyValue('--text-color').trim() ||
+                     (isDarkMode ? '#ffffff' : '#000000');
+    const gridColor = isDarkMode ? '#444' : '#eee';
+    
+    // Initialize default Plotly layout with correct theme
     appState.plotLayout = {
         title: '',
         xaxis: {
             title: 'Wavelength (nm)',
-            gridcolor: '#eee'
+            gridcolor: gridColor,
+            zerolinecolor: gridColor,
+            showgrid: true
         },
         yaxis: {
             title: 'Intensity',
-            gridcolor: '#eee',
+            gridcolor: gridColor,
+            zerolinecolor: gridColor,
+            showgrid: true,
             range: [0, 65535]  // Set default range to the full 16-bit ADC range
         },
         margin: { t: 30, l: 60, r: 30, b: 60 },
-        plot_bgcolor: 'var(--plot-bg-color)',
-        paper_bgcolor: 'var(--plot-bg-color)',
+        plot_bgcolor: plotBgColor,
+        paper_bgcolor: plotBgColor,
         hovermode: 'closest',
         font: {
-            color: 'var(--text-color)'
+            color: textColor
         }
     };
     
-    // Initialize empty plot
+    // Initialize empty plot with correct theme
     Plotly.newPlot('spectrum-plot', [], appState.plotLayout, {
         responsive: true,
         displayModeBar: true,
@@ -1268,13 +1300,32 @@ function drawSpectrum(wavelengths, intensities) {
         xAxisTitle = 'Pixels';
     }
     
-    // Update plot layout with current axis title
-    appState.plotLayout.xaxis.title = xAxisTitle;
+    // Update plot layout with current theme settings
+    const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+    const updatedLayout = {
+        ...appState.plotLayout,
+        xaxis: {
+            ...appState.plotLayout.xaxis,
+            title: xAxisTitle,
+            gridcolor: isDarkMode ? '#444' : '#eee',
+            zerolinecolor: isDarkMode ? '#444' : '#eee',
+            showgrid: true
+        },
+        yaxis: {
+            ...appState.plotLayout.yaxis,
+            gridcolor: isDarkMode ? '#444' : '#eee',
+            zerolinecolor: isDarkMode ? '#444' : '#eee',
+            showgrid: true
+        },
+        plot_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--plot-bg-color').trim(),
+        paper_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--plot-bg-color').trim(),
+        font: {
+            color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim()
+        }
+    };
     
     // Determine line color based on theme
-    const lineColor = document.documentElement.getAttribute('data-theme') === 'dark' ? 
-        '#00b4ff' : // Thorlabs blue for dark mode
-        '#3498db';  // Original blue for light mode
+    const lineColor = isDarkMode ? '#00b4ff' : '#3498db';
         
     Plotly.react('spectrum-plot', [{
         x: xData,
@@ -1286,7 +1337,7 @@ function drawSpectrum(wavelengths, intensities) {
             width: 2
         },
         name: 'Spectrum'
-    }], appState.plotLayout, {
+    }], updatedLayout, {
         responsive: true,
         displayModeBar: true,
         modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
@@ -1489,103 +1540,62 @@ function setupThemeToggle() {
     // Add event listener
     elements.themeToggleBtn.addEventListener('click', () => {
         const currentTheme = document.documentElement.getAttribute('data-theme');
+        const isDarkMode = currentTheme === 'dark';
         
-        if (currentTheme === 'dark') {
+        if (isDarkMode) {
             document.documentElement.removeAttribute('data-theme');
             localStorage.setItem('theme', 'light');
             elements.themeIcon.textContent = '🌙'; // Moon icon for switching to dark
             logMessage('Light theme activated', 'info');
-            
-            // Update Plotly theme
-            updatePlotlyTheme();
-            
-            // Update ROI visualization with current values
-            const roi = {
-                start_x: parseInt(elements.roiStartX.value) || 0,
-                start_y: parseInt(elements.roiStartY.value) || 0,
-                width: parseInt(elements.roiWidth.value) || 5496,
-                height: parseInt(elements.roiHeight.value) || 3672
-            };
-            updateRoiVisualization(roi);
         } else {
             document.documentElement.setAttribute('data-theme', 'dark');
             localStorage.setItem('theme', 'dark');
             elements.themeIcon.textContent = '☀️'; // Sun icon for switching to light
             logMessage('Dark theme activated', 'info');
-            
-            // Update Plotly theme
-            updatePlotlyTheme();
-            
-            // Update ROI visualization with current values
-            const roi = {
-                start_x: parseInt(elements.roiStartX.value) || 0,
-                start_y: parseInt(elements.roiStartY.value) || 0,
-                width: parseInt(elements.roiWidth.value) || 5496,
-                height: parseInt(elements.roiHeight.value) || 3672
-            };
-            updateRoiVisualization(roi);
-        }
-    });
-}
-
-// Update Plotly theme
-function updatePlotlyTheme() {
-    if (!elements.spectrumPlot) return;
-    
-    // Only update if we have a plot with data
-    if (appState.wavelengths && appState.currentSpectrum) {
-        // Choose x-axis data based on display mode
-        let xData;
-        if (appState.displayMode === 'wavelength') {
-            xData = appState.wavelengths;
-        } else if (appState.displayMode === 'raman') {
-            xData = appState.ramanShifts || appState.wavelengths;
-        } else {
-            // Pixels mode - create an array of pixel indices
-            xData = Array.from({ length: appState.currentSpectrum.length }, (_, i) => i);
         }
         
-        // Determine line color based on theme
-        const lineColor = document.documentElement.getAttribute('data-theme') === 'dark' ? 
-            '#00b4ff' : // Thorlabs blue for dark mode
-            '#3498db';  // Original blue for light mode
-            
-        Plotly.react('spectrum-plot', [{
-            x: xData,
-            y: appState.currentSpectrum,
-            type: 'scatter',
-            mode: 'lines',
-            line: {
-                color: lineColor,
-                width: 2
-            },
-            name: 'Spectrum'
-        }], {
+        // Get updated theme colors
+        const root = document.documentElement;
+        const plotBgColor = root.style.getPropertyValue('--plot-bg-color') || 
+                           getComputedStyle(root).getPropertyValue('--plot-bg-color').trim() ||
+                           (!isDarkMode ? '#ffffff' : '#1a1a1a');
+        const textColor = root.style.getPropertyValue('--text-color') || 
+                         getComputedStyle(root).getPropertyValue('--text-color').trim() ||
+                         (!isDarkMode ? '#000000' : '#ffffff');
+        const gridColor = !isDarkMode ? '#eee' : '#444';
+        
+        // Update plot layout with new theme colors
+        const updatedLayout = {
             ...appState.plotLayout,
-            plot_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--plot-bg-color').trim(),
-            paper_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--plot-bg-color').trim(),
+            plot_bgcolor: plotBgColor,
+            paper_bgcolor: plotBgColor,
             font: {
-                color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim()
+                color: textColor
             },
             xaxis: {
                 ...appState.plotLayout.xaxis,
-                gridcolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
-                zerolinecolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
-                showgrid: true
+                gridcolor: gridColor,
+                zerolinecolor: gridColor
             },
             yaxis: {
                 ...appState.plotLayout.yaxis,
-                gridcolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
-                zerolinecolor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#444' : '#eee',
-                showgrid: true
+                gridcolor: gridColor,
+                zerolinecolor: gridColor
             }
-        }, {
-            responsive: true,
-            displayModeBar: true,
-            modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
-            displaylogo: false
-        });
-    }
+        };
+        
+        // Update the plot with new theme
+        Plotly.relayout('spectrum-plot', updatedLayout);
+        
+        // Update ROI visualization with current values
+        const roi = {
+            start_x: parseInt(elements.roiStartX.value) || 0,
+            start_y: parseInt(elements.roiStartY.value) || 0,
+            width: parseInt(elements.roiWidth.value) || 5496,
+            height: parseInt(elements.roiHeight.value) || 3672
+        };
+        updateRoiVisualization(roi);
+    });
 }
 
 // Load default settings from server
